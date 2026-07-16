@@ -505,15 +505,20 @@ export function EditProductsContent({ onSaveRef }: EditProductsContentProps) {
 
   // ── Coord button renderer ─────────────────────────────────────────────────
   function CoordButton({ code, lat, lng }: { code: string; lat?: number; lng?: number }) {
-    const hasPending = code === STARTING_POINT_CODE ? spCoordPending : !!coordDrafts[code]
+    const isStartingPoint = code === STARTING_POINT_CODE
+    const hasPending = isStartingPoint ? spCoordPending : !!coordDrafts[code]
     const hasCoords = lat != null && lng != null
     return (
       <button
         onClick={() => setCoordDialogTarget(code)}
         className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium border transition-colors
           ${hasCoords
-            ? "border-sky-300 dark:border-sky-700 text-sky-700 dark:text-sky-400 bg-sky-50 dark:bg-sky-950/40 hover:bg-sky-100 dark:hover:bg-sky-900/40"
-            : "border-dashed border-muted-foreground/30 text-muted-foreground hover:border-sky-400 hover:text-sky-600"}`}
+            ? isStartingPoint
+              ? "border-sky-300 dark:border-sky-700 text-sky-700 dark:text-sky-400 bg-sky-50 dark:bg-sky-950/40 hover:bg-sky-100 dark:hover:bg-sky-900/40"
+              : "border-border text-foreground bg-muted/40 hover:bg-muted/60"
+            : isStartingPoint
+              ? "border-dashed border-muted-foreground/30 text-muted-foreground hover:border-sky-400 hover:text-sky-600"
+              : "border-dashed border-muted-foreground/30 text-muted-foreground hover:border-foreground/40 hover:text-foreground"}`}
       >
         <MapPinIcon className="size-3" />
         {hasCoords

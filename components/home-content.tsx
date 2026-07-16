@@ -35,7 +35,7 @@ import {
 } from "@/components/ui/dialog"
 import { useSidebar } from "@/components/ui/sidebar"
 import { LoadingText } from "@/components/ui/loading-text"
-import { cn, compareCodes } from "@/lib/utils"
+import { cn, compareCodes, isDeliveryActive } from "@/lib/utils"
 
 const ALL_ROUTES_VALUE = "__all_routes__"
 
@@ -125,10 +125,23 @@ export function HomeContent({ initialRouteId }: HomeContentProps) {
 
   const visibleAssignments = React.useMemo(() => {
     if (!selectedRoute?.value) return []
-    return assignments
+    const sorted = assignments
       .filter((item) => item.routeId === selectedRoute.value)
       .sort((a, b) => compareCodes(a.locationCode, b.locationCode))
-  }, [assignments, selectedRoute])
+
+    // Active-today locations first, locations with no delivery today pushed to the bottom.
+    const active: RouteLocation[] = []
+    const inactive: RouteLocation[] = []
+    sorted.forEach((item) => {
+      const deliveryValue = productMap.get(item.locationCode)?.image || item.delivery
+      if (isDeliveryActive(deliveryValue)) {
+        active.push(item)
+      } else {
+        inactive.push(item)
+      }
+    })
+    return [...active, ...inactive]
+  }, [assignments, selectedRoute, productMap])
 
   const items = React.useMemo(
     () =>
@@ -314,7 +327,7 @@ export function HomeContent({ initialRouteId }: HomeContentProps) {
             <Table className="text-xs min-w-[600px]">
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
-                  {["Code", "Name", "KM", "Delivery"].map((h) => (
+                  {["No", "Code", "Name", "Delivery", "KM"].map((h) => (
                     <TableHead
                       key={h}
                       className="text-[11px] font-semibold tracking-wide py-2 px-4 text-center"
@@ -327,26 +340,36 @@ export function HomeContent({ initialRouteId }: HomeContentProps) {
               <TableBody>
                 {visibleAssignments.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={4} className="py-10 text-center text-muted-foreground">
+                    <TableCell colSpan={5} className="py-10 text-center text-muted-foreground">
                       No route locations assigned to this route yet.
                     </TableCell>
                   </TableRow>
                 ) : (
-                  visibleAssignments.map((assignment) => {
+                  visibleAssignments.map((assignment, index) => {
                     const product = productMap.get(assignment.locationCode)
+                    const deliveryValue = product?.image || assignment.delivery
+                    const isActiveToday = isDeliveryActive(deliveryValue)
                     return (
                       <TableRow
                         key={`${assignment.routeId}-${assignment.locationCode}`}
                         className={cn(
                           "h-10",
-                          hasDeliveryToday && "hover:bg-emerald-50/40 dark:hover:bg-emerald-950/20"
+                          isActiveToday
+                            ? hasDeliveryToday && "hover:bg-emerald-50/40 dark:hover:bg-emerald-950/20"
+                            : "bg-muted/30 text-muted-foreground/60 hover:bg-muted/45"
                         )}
                       >
+                        <TableCell className="py-1.5 px-4 text-center font-medium tabular-nums">
+                          {index + 1}
+                        </TableCell>
                         <TableCell className="py-1.5 px-4 text-center font-medium">
                           {assignment.locationCode}
                         </TableCell>
                         <TableCell className="py-1.5 px-4 text-center font-medium">
                           {product?.productName ?? assignment.locationName ?? "Unknown"}
+                        </TableCell>
+                        <TableCell className="py-1.5 px-4 text-center text-muted-foreground">
+                          {deliveryValue || "-"}
                         </TableCell>
                         <TableCell className="py-1.5 px-4 text-center font-medium tabular-nums">
                           {assignment.km != null ? (
@@ -354,9 +377,6 @@ export function HomeContent({ initialRouteId }: HomeContentProps) {
                           ) : (
                             <span className="text-muted-foreground/40">—</span>
                           )}
-                        </TableCell>
-                        <TableCell className="py-1.5 px-4 text-center text-muted-foreground">
-                          {product?.image || assignment.delivery || "-"}
                         </TableCell>
                       </TableRow>
                     )
