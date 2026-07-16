@@ -33,23 +33,27 @@ interface MachineEditRowProps {
   machine: Machine
   draftKey: string
   draft: Machine
+  duplicateValue?: boolean
   onDraftChange: (machine: Machine) => void
   onConfirm: () => void
   onCancel: () => void
 }
 
-function MachineEditRow({ machine, draft, onDraftChange, onConfirm, onCancel }: MachineEditRowProps) {
+function MachineEditRow({ machine, draft, duplicateValue, onDraftChange, onConfirm, onCancel }: MachineEditRowProps) {
   return (
     <TableRow className="bg-accent/20">
       <TableCell className="py-1.5 px-4 text-center">
         <input
-          className={inputCls}
+          className={`${inputCls} ${duplicateValue ? "border-red-500 focus:ring-red-500" : ""}`}
           value={draft.value}
           onChange={(e) =>
             onDraftChange({ ...draft, value: e.target.value.toUpperCase() })
           }
           placeholder="R001"
         />
+        {duplicateValue && (
+          <p className="mt-1 text-left text-xs text-red-600">Duplicate route ID detected</p>
+        )}
       </TableCell>
       <TableCell className="py-1.5 px-4 text-center">
         <input
@@ -103,6 +107,7 @@ export function EditMachinesContent({ onSaveRef }: EditMachinesContentProps) {
   const [adding, setAdding] = React.useState(false)
   const [activeAddDraftKey, setActiveAddDraftKey] = React.useState<string | null>(null)
   const [pendingDraftKeys, setPendingDraftKeys] = React.useState<string[]>([])
+  const [saveError, setSaveError] = React.useState<string | null>(null)
 
   React.useEffect(() => {
     getMachines().then((m) => {
@@ -111,8 +116,54 @@ export function EditMachinesContent({ onSaveRef }: EditMachinesContentProps) {
     })
   }, [])
 
+  const allMachineRows = React.useMemo(() => {
+    const rows: Machine[] = []
+
+    for (const machine of machines) {
+      rows.push(drafts[`${machine.id}`] ?? machine)
+    }
+
+    for (const key of pendingDraftKeys) {
+      if (!/^\d+$/.test(key) && drafts[key]) {
+        rows.push(drafts[key])
+      }
+    }
+
+    if (activeAddDraftKey && drafts[activeAddDraftKey]) {
+      rows.push(drafts[activeAddDraftKey])
+    }
+
+    return rows
+  }, [machines, drafts, pendingDraftKeys, activeAddDraftKey])
+
+  const duplicateMachineValues = React.useMemo(() => {
+    const counts = new Map<string, number>()
+
+    for (const machine of allMachineRows) {
+      const value = machine.value.trim().toUpperCase()
+      if (!value) continue
+      counts.set(value, (counts.get(value) ?? 0) + 1)
+    }
+
+    return new Set(
+      Array.from(counts.entries())
+        .filter(([, count]) => count > 1)
+        .map(([value]) => value)
+    )
+  }, [allMachineRows])
+
   const handleSaveAll = React.useCallback(async () => {
+    setSaveError(null)
     if (pendingDraftKeys.length === 0) return
+
+    if (duplicateMachineValues.size > 0) {
+      setSaveError(
+        `Duplicate route ID${duplicateMachineValues.size > 1 ? "s" : ""}: ${
+          Array.from(duplicateMachineValues).join(", ")
+        }`
+      )
+      return
+    }
 
     for (const key of pendingDraftKeys) {
       const draft = drafts[key]
@@ -155,7 +206,7 @@ export function EditMachinesContent({ onSaveRef }: EditMachinesContentProps) {
     setEditingId(null)
     setActiveAddDraftKey(null)
     setPendingDraftKeys([])
-  }, [drafts, machines, pendingDraftKeys])
+  }, [drafts, duplicateMachineValues, machines, pendingDraftKeys])
 
   React.useEffect(() => {
     if (onSaveRef) {
@@ -182,6 +233,8 @@ export function EditMachinesContent({ onSaveRef }: EditMachinesContentProps) {
   }
 
   function confirmDraft() {
+    setSaveError(null)
+
     if (adding && activeAddDraftKey && drafts[activeAddDraftKey]) {
       const key = activeAddDraftKey
       setPendingDraftKeys((prev) => (prev.includes(key) ? prev : [...prev, key]))
@@ -225,6 +278,7 @@ export function EditMachinesContent({ onSaveRef }: EditMachinesContentProps) {
   }
 
   function updateDraft(key: string, machine: Machine) {
+    setSaveError(null)
     setDrafts((prev) => ({ ...prev, [key]: machine }))
   }
 
@@ -251,6 +305,12 @@ export function EditMachinesContent({ onSaveRef }: EditMachinesContentProps) {
         </Button>
       </div>
 
+      {saveError && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {saveError}
+        </div>
+      )}
+
       <div className="rounded-xl border bg-card overflow-hidden text-xs">
         <div className="overflow-x-auto">
           <Table className="text-xs min-w-[500px]">
@@ -272,6 +332,9 @@ export function EditMachinesContent({ onSaveRef }: EditMachinesContentProps) {
                   machine={{ value: "", label: "" }}
                   draftKey={activeAddDraftKey}
                   draft={drafts[activeAddDraftKey]}
+                  duplicateValue={duplicateMachineValues.has(
+                    drafts[activeAddDraftKey].value.trim().toUpperCase()
+                  )}
                   onDraftChange={(m) => updateDraft(activeAddDraftKey, m)}
                   onConfirm={confirmDraft}
                   onCancel={cancelEdit}
@@ -279,22 +342,28 @@ export function EditMachinesContent({ onSaveRef }: EditMachinesContentProps) {
               )}
               {pendingDraftKeys
                 .filter((key) => !/^\d+$/.test(key) && drafts[key])
-                .map((key) => (
-                  <TableRow key={key} className="h-10 bg-emerald-50/60 dark:bg-emerald-950/20">
-                    <TableCell className="py-1.5 px-4 text-center">
+                .map((key) => {
+                  const normalizedValue = drafts[key]?.value?.trim().toUpperCase() ?? ""
+                  const hasDuplicate = normalizedValue ? duplicateMachineValues.has(normalizedValue) : false
+
+                  return (
+                  <TableRow key={key} className="h-10 bg-emerald-50/60 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-300">
+                    <TableCell className={`py-1.5 px-4 text-center ${hasDuplicate ? "bg-red-50/80 text-red-700" : ""}`}>
                       <span className="font-mono font-bold tracking-wider">
                         {drafts[key]?.value}
                       </span>
+                      {hasDuplicate && (
+                        <span className="ml-2 text-[10px] font-medium uppercase tracking-wide text-red-600">
+                          Duplicate
+                        </span>
+                      )}
                     </TableCell>
-                    <TableCell className="py-1.5 px-4 text-center text-muted-foreground">
+                    <TableCell className="py-1.5 px-4 text-center">
                       <div className="flex flex-col items-center gap-1">
                         <span>{drafts[key]?.label}</span>
-                        <span className="text-[10px] text-emerald-600 font-medium uppercase tracking-wide">
-                          Pending Save
-                        </span>
                       </div>
                     </TableCell>
-                    <TableCell className="py-1.5 px-4 text-center text-muted-foreground">
+                    <TableCell className="py-1.5 px-4 text-center">
                       {drafts[key]?.shift ?? "AM"}
                     </TableCell>
                     <TableCell className="py-1.5 px-4 text-center">
@@ -324,17 +393,19 @@ export function EditMachinesContent({ onSaveRef }: EditMachinesContentProps) {
                       </div>
                     </TableCell>
                   </TableRow>
-                ))}
+                )})}
               {machines.map((machine) => {
                 const draftKey = `${machine.id}`
                 const isEditing = editingId === machine.id
                 if (isEditing && drafts[draftKey]) {
+                  const normalizedValue = drafts[draftKey].value.trim().toUpperCase()
                   return (
                     <MachineEditRow
                       key={machine.id}
                       machine={machine}
                       draftKey={draftKey}
                       draft={drafts[draftKey]}
+                      duplicateValue={duplicateMachineValues.has(normalizedValue)}
                       onDraftChange={(m) => updateDraft(draftKey, m)}
                       onConfirm={confirmDraft}
                       onCancel={cancelEdit}
@@ -346,24 +417,30 @@ export function EditMachinesContent({ onSaveRef }: EditMachinesContentProps) {
                   ? drafts[draftKey]
                   : undefined
                 const displayMachine = pendingDraft ?? machine
+                const normalizedValue = displayMachine.value.trim().toUpperCase()
+                const hasDuplicate = normalizedValue ? duplicateMachineValues.has(normalizedValue) : false
+                const rowClass = pendingDraft
+                  ? "h-10 text-orange-800 dark:text-orange-300"
+                  : "h-10"
+                const mutedCellClass = pendingDraft ? "" : "text-muted-foreground"
                 return (
-                  <TableRow key={machine.id ?? machine.value} className="h-10">
-                    <TableCell className="py-1.5 px-4 text-center">
+                  <TableRow key={machine.id ?? machine.value} className={rowClass}>
+                    <TableCell className={`py-1.5 px-4 text-center ${hasDuplicate ? "bg-red-50/80 text-red-700" : ""}`}>
                       <span className="font-mono font-bold tracking-wider">
                         {displayMachine.value}
                       </span>
+                      {hasDuplicate && (
+                        <span className="ml-2 text-[10px] font-medium uppercase tracking-wide text-red-600">
+                          Duplicate
+                        </span>
+                      )}
                     </TableCell>
-                    <TableCell className="py-1.5 px-4 text-center text-muted-foreground">
+                    <TableCell className={`py-1.5 px-4 text-center ${mutedCellClass}`}>
                       <div className="flex flex-col items-center gap-1">
                         <span>{displayMachine.label}</span>
-                        {pendingDraft && (
-                          <span className="text-[10px] text-emerald-600 font-medium uppercase tracking-wide">
-                            Pending Save
-                          </span>
-                        )}
                       </div>
                     </TableCell>
-                    <TableCell className="py-1.5 px-4 text-center text-muted-foreground">
+                    <TableCell className={`py-1.5 px-4 text-center ${mutedCellClass}`}>
                       {displayMachine.shift ?? "AM"}
                     </TableCell>
                     <TableCell className="py-1.5 px-4 text-center">

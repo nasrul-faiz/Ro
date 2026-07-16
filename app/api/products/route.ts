@@ -56,6 +56,22 @@ export async function PUT(request: NextRequest) {
     const payload = await request.json()
 
     if (Array.isArray(payload)) {
+      if (payload.length === 0) {
+        return NextResponse.json(
+          { error: "At least one product is required" },
+          { status: 400 }
+        )
+      }
+
+      for (const product of payload as Product[]) {
+        if (!product.product_code || !product.product_name) {
+          return NextResponse.json(
+            { error: "product_code and product_name are required" },
+            { status: 400 }
+          )
+        }
+      }
+
       const pool = getDbPool()
       const client = await pool.connect()
 
@@ -64,10 +80,6 @@ export async function PUT(request: NextRequest) {
         await client.query("DELETE FROM products")
 
         for (const product of payload as Product[]) {
-          if (!product.product_code || !product.product_name) {
-            throw new Error("product_code and product_name are required")
-          }
-
           await client.query(
             `INSERT INTO products (product_code, product_name, image)
              VALUES ($1, $2, $3)`,

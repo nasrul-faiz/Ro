@@ -23,6 +23,8 @@ import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog"
 const inputCls =
   "w-full rounded-md border bg-background px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
 
+const deliveryOptions = ["Daily", "WD", "Alt 1", "Alt 2", "WE", "WA"] as const
+
 interface EditRowProps {
   draft: Product
   onDraftChange: (product: Product) => void
@@ -41,7 +43,7 @@ function EditRow({
     <TableRow className="bg-accent/20">
       <TableCell className="py-1.5 text-center">
         <input
-          className={inputCls}
+          className={`${inputCls} ${duplicateCode ? "border-red-500 focus:ring-red-500" : ""}`}
           value={draft.productCode}
           onChange={(e) => onDraftChange({ ...draft, productCode: e.target.value.toUpperCase() })}
           placeholder="LOC-001"
@@ -61,12 +63,18 @@ function EditRow({
         />
       </TableCell>
       <TableCell className="py-1.5">
-        <input
+        <select
           className={inputCls}
           value={draft.image}
           onChange={(e) => onDraftChange({ ...draft, image: e.target.value })}
-          placeholder="Delivery"
-        />
+        >
+          <option value="">Select delivery</option>
+          {deliveryOptions.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
       </TableCell>
       <TableCell className="py-1.5">
         <div className="flex justify-center gap-1">
@@ -125,8 +133,12 @@ export function EditProductsContent({ onSaveRef }: EditProductsContentProps) {
       }
     }
 
+    if (activeAddDraftKey && drafts[activeAddDraftKey]) {
+      rows.push(drafts[activeAddDraftKey])
+    }
+
     return rows
-  }, [products, drafts, pendingDraftKeys])
+  }, [products, drafts, pendingDraftKeys, activeAddDraftKey])
 
   const duplicateProductCodes = React.useMemo(() => {
     const counts = new Map<string, number>()
@@ -187,6 +199,9 @@ export function EditProductsContent({ onSaveRef }: EditProductsContentProps) {
           productName: name,
           image: draft.image.trim(),
         })
+      } else if (!code || !name) {
+        setSaveError("Location code and name are required before saving")
+        return
       }
     }
 
@@ -194,16 +209,22 @@ export function EditProductsContent({ onSaveRef }: EditProductsContentProps) {
       a.productCode.localeCompare(b.productCode)
     )
 
+    if (nextProducts.length === 0 && products.length > 0) {
+      setSaveError("At least one valid location is required to save changes")
+      return
+    }
+
     const ok = await replaceProducts(nextProducts)
     if (ok) {
       setProducts(nextProducts)
+      setDrafts({})
+      setAdding(false)
+      setEditingCode(null)
+      setActiveAddDraftKey(null)
+      setPendingDraftKeys([])
+    } else {
+      setSaveError("Failed to save locations. Your pending edits were kept.")
     }
-
-    setDrafts({})
-    setAdding(false)
-    setEditingCode(null)
-    setActiveAddDraftKey(null)
-    setPendingDraftKeys([])
   }, [drafts, duplicateProductCodes, pendingDraftKeys, products])
 
   React.useEffect(() => {
@@ -333,6 +354,9 @@ export function EditProductsContent({ onSaveRef }: EditProductsContentProps) {
             {adding && activeAddDraftKey && drafts[activeAddDraftKey] && (
               <EditRow
                 draft={drafts[activeAddDraftKey]}
+                duplicateCode={duplicateProductCodes.has(
+                  drafts[activeAddDraftKey].productCode.trim().toUpperCase()
+                )}
                 onDraftChange={(p) => updateDraft(activeAddDraftKey, p)}
                 onConfirm={confirmDraft}
                 onCancel={cancelEdit}
@@ -343,22 +367,26 @@ export function EditProductsContent({ onSaveRef }: EditProductsContentProps) {
               .map((key) => {
                 const draft = drafts[key]
                 if (!draft) return null
+                const normalizedCode = draft.productCode.trim().toUpperCase()
+                const hasDuplicate = normalizedCode ? duplicateProductCodes.has(normalizedCode) : false
 
                 return (
-                  <TableRow key={key} className="h-10 bg-emerald-50/60 dark:bg-emerald-950/20">
-                    <TableCell className="py-1.5 text-center text-muted-foreground font-mono">
+                  <TableRow key={key} className="h-10 bg-emerald-50/60 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-300">
+                    <TableCell className={`py-1.5 text-center font-mono ${hasDuplicate ? "bg-red-50/80 text-red-700" : ""}`}>
                       {draft.productCode}
+                      {hasDuplicate && (
+                        <span className="ml-2 text-[10px] font-medium uppercase tracking-wide text-red-600">
+                          Duplicate
+                        </span>
+                      )}
                     </TableCell>
                     <TableCell className="py-1.5 text-center">
                       <span className="max-w-[200px] truncate font-medium">
                         {draft.productName}
                       </span>
                     </TableCell>
-                    <TableCell className="py-1.5 text-center text-muted-foreground">
+                    <TableCell className="py-1.5 text-center">
                       {draft.image || "-"}
-                      <span className="ml-2 text-[10px] font-medium uppercase tracking-wide text-emerald-600">
-                        Pending Save
-                      </span>
                     </TableCell>
                     <TableCell className="py-1.5">
                       <div className="flex justify-center gap-1">
@@ -406,23 +434,29 @@ export function EditProductsContent({ onSaveRef }: EditProductsContentProps) {
                 ? drafts[item.productCode]
                 : undefined
               const displayItem = pendingDraft ?? item
+              const normalizedCode = displayItem.productCode.trim().toUpperCase()
+              const hasDuplicate = normalizedCode ? duplicateProductCodes.has(normalizedCode) : false
+              const rowClass = pendingDraft
+                ? "h-10 text-orange-800 dark:text-orange-300"
+                : "h-10"
+              const mutedCellClass = pendingDraft ? "" : "text-muted-foreground"
               return (
-                <TableRow key={item.productCode} className="h-10">
-                  <TableCell className="text-center py-1.5 text-muted-foreground font-mono">
+                <TableRow key={item.productCode} className={rowClass}>
+                  <TableCell className={`text-center py-1.5 font-mono ${hasDuplicate ? "bg-red-50/80 text-red-700" : mutedCellClass}`}>
                     {displayItem.productCode}
+                    {hasDuplicate && (
+                      <span className="ml-2 text-[10px] font-medium uppercase tracking-wide text-red-600">
+                        Duplicate
+                      </span>
+                    )}
                   </TableCell>
                   <TableCell className="py-1.5 text-center">
                     <span className="font-medium truncate max-w-[200px]">
                       {displayItem.productName}
                     </span>
                   </TableCell>
-                  <TableCell className="py-1.5 text-center text-muted-foreground">
+                  <TableCell className={`py-1.5 text-center ${mutedCellClass}`}>
                     {displayItem.image || "-"}
-                    {pendingDraft && (
-                      <span className="ml-2 text-[10px] text-emerald-600 font-medium uppercase tracking-wide">
-                        Pending Save
-                      </span>
-                    )}
                   </TableCell>
                   <TableCell className="py-1.5">
                     <div className="flex justify-center gap-1">
