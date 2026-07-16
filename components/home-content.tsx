@@ -1,6 +1,8 @@
 "use client"
 
 import * as React from "react"
+import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { getMachines, type Machine } from "@/lib/machine-store"
 import { getProducts, type Product } from "@/lib/product-store"
 import { getRouteLocations, type RouteLocation } from "@/lib/route-location-store"
@@ -25,13 +27,22 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { Button, buttonVariants } from "@/components/ui/button"
+import { useSidebar } from "@/components/ui/sidebar"
+import { cn } from "@/lib/utils"
 
-export function HomeContent() {
+interface HomeContentProps {
+  initialRouteId?: string
+}
+
+export function HomeContent({ initialRouteId }: HomeContentProps) {
   const [machines, setMachines] = React.useState<Machine[]>([])
   const [products, setProducts] = React.useState<Product[]>([])
   const [assignments, setAssignments] = React.useState<RouteLocation[]>([])
   const [loading, setLoading] = React.useState(true)
   const [selectedRoute, setSelectedRoute] = React.useState<Machine | null>(null)
+  const router = useRouter()
+  const { isMobile, setOpen, setOpenMobile } = useSidebar()
 
   React.useEffect(() => {
     Promise.all([getMachines(), getProducts(), getRouteLocations()]).then(([machinesData, productsData, routeLocations]) => {
@@ -41,6 +52,18 @@ export function HomeContent() {
       setLoading(false)
     })
   }, [])
+
+  React.useEffect(() => {
+    if (loading) return
+
+    if (!initialRouteId) {
+      setSelectedRoute(null)
+      return
+    }
+
+    const machine = machines.find((item) => item.value === initialRouteId) ?? null
+    setSelectedRoute(machine)
+  }, [initialRouteId, loading, machines])
 
   const productMap = React.useMemo(() => new Map(products.map((p) => [p.productCode, p])), [products])
 
@@ -63,11 +86,63 @@ export function HomeContent() {
   function handleSelectRoute(value: string | null) {
     const machine = machines.find((item) => item.value === value) ?? null
     setSelectedRoute(machine)
+
+    if (isMobile) {
+      setOpenMobile(false)
+    } else {
+      setOpen(false)
+    }
+
+    if (!value) {
+      router.push("/home")
+      return
+    }
+
+    router.push(`/home/${encodeURIComponent(value)}`)
+  }
+
+  const hasInvalidRoute = Boolean(initialRouteId) && !loading && !selectedRoute
+
+  function handleRouteLinkClick() {
+    if (isMobile) {
+      setOpenMobile(false)
+      return
+    }
+
+    setOpen(false)
   }
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-3 rounded-xl border bg-card p-4">
+        <div className="flex flex-wrap gap-2">
+          <Link
+            href="/home"
+            onClick={handleRouteLinkClick}
+            className={cn(
+              buttonVariants({ variant: !selectedRoute ? "default" : "outline", size: "sm" })
+            )}
+          >
+            All routes
+          </Link>
+          {machines.map((machine) => {
+            const isActive = machine.value === selectedRoute?.value
+
+            return (
+              <Link
+                key={machine.value}
+                href={`/home/${encodeURIComponent(machine.value)}`}
+                onClick={handleRouteLinkClick}
+                className={cn(
+                  buttonVariants({ variant: isActive ? "default" : "outline", size: "sm" })
+                )}
+              >
+                {machine.label}
+              </Link>
+            )
+          })}
+        </div>
+
         <Field className="w-full max-w-xl">
           <FieldLabel>Route</FieldLabel>
           <Select value={selectedRoute?.value ?? undefined} onValueChange={handleSelectRoute}>
@@ -84,7 +159,7 @@ export function HomeContent() {
               </SelectGroup>
             </SelectContent>
           </Select>
-          <FieldDescription>Select a route to view its assigned locations.</FieldDescription>
+          <FieldDescription>Each route now has its own URL, so you can open or share it directly.</FieldDescription>
         </Field>
       </div>
 
@@ -133,9 +208,16 @@ export function HomeContent() {
             </Table>
           </div>
         </div>
+      ) : hasInvalidRoute ? (
+        <div className="rounded-xl border border-dashed bg-muted/20 p-10 text-center text-sm text-muted-foreground">
+          <p>Route not found for this URL.</p>
+          <Button variant="outline" size="sm" className="mt-4" onClick={() => router.push("/home")}>
+            Back to route list
+          </Button>
+        </div>
       ) : (
         <div className="rounded-xl border border-dashed bg-muted/20 p-10 text-center text-sm text-muted-foreground">
-          {loading ? "Loading routes..." : "Select a route from the dropdown to view its assigned locations."}
+          {loading ? "Loading routes..." : "Select a route link above to view its assigned locations."}
         </div>
       )}
     </div>

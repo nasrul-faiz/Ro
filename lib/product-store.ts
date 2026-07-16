@@ -5,6 +5,10 @@ export interface Product {
   image: string
 }
 
+function sortProducts(products: Product[]): Product[] {
+  return [...products].sort((a, b) => a.productCode.localeCompare(b.productCode))
+}
+
 function toApiProduct(product: Product) {
   return {
     id: product.id,
@@ -33,7 +37,7 @@ export async function getProducts(): Promise<Product[]> {
     const response = await fetch("/api/products", { cache: "no-store" })
     if (!response.ok) throw new Error("Failed to fetch products")
     const data = await response.json()
-    return data.map(fromApiProduct)
+    return sortProducts(data.map(fromApiProduct))
   } catch (error) {
     console.error("Error fetching products:", error)
     return []
