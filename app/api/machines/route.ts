@@ -9,6 +9,7 @@ interface Machine {
   value: string
   label: string
   shift?: string
+  starting_point?: string
 }
 
 function normalizeShift(shift?: string): string {
@@ -16,20 +17,32 @@ function normalizeShift(shift?: string): string {
   return normalized === "PM" ? "PM" : "AM"
 }
 
-async function ensureMachineShiftColumn() {
+async function ensureMachineColumns() {
   try {
+    await dbQuery(`
+      CREATE TABLE IF NOT EXISTS machines (
+        id SERIAL PRIMARY KEY,
+        value VARCHAR(50) NOT NULL UNIQUE,
+        label VARCHAR(255) NOT NULL,
+        shift VARCHAR(10) DEFAULT 'AM',
+        starting_point VARCHAR(255),
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `)
     await dbQuery("ALTER TABLE machines ADD COLUMN IF NOT EXISTS shift VARCHAR(10) DEFAULT 'AM'")
+    await dbQuery("ALTER TABLE machines ADD COLUMN IF NOT EXISTS starting_point VARCHAR(255)")
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to ensure shift column"
-    console.error("[machines] Error ensuring shift column:", message)
+    const message = error instanceof Error ? error.message : "Failed to ensure machine columns"
+    console.error("[machines] Error ensuring columns:", message)
   }
 }
 
 export async function GET() {
   try {
-    await ensureMachineShiftColumn()
+    await ensureMachineColumns()
     const result = await dbQuery<Machine>(
-      "SELECT id, value, label, shift FROM machines ORDER BY created_at ASC"
+      "SELECT id, value, label, shift, starting_point FROM machines ORDER BY created_at ASC"
     )
     return NextResponse.json(result.rows)
   } catch (error) {
@@ -42,8 +55,8 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    await ensureMachineShiftColumn()
-    const { value, label, shift }: Machine = await request.json()
+    await ensureMachineColumns()
+    const { value, label, shift, starting_point }: Machine = await request.json()
 
     if (!value || !label) {
       return NextResponse.json(
@@ -53,8 +66,8 @@ export async function POST(request: NextRequest) {
     }
 
     const result = await dbQuery<Machine>(
-      "INSERT INTO machines (value, label, shift) VALUES ($1, $2, $3) RETURNING id, value, label, shift",
-      [value, label, normalizeShift(shift)]
+      "INSERT INTO machines (value, label, shift, starting_point) VALUES ($1, $2, $3, $4) RETURNING id, value, label, shift, starting_point",
+      [value, label, normalizeShift(shift), starting_point ?? null]
     )
 
     return NextResponse.json(result.rows[0], { status: 201 })
@@ -67,8 +80,8 @@ export async function POST(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
-    await ensureMachineShiftColumn()
-    const { id, value, label, shift }: Machine = await request.json()
+    await ensureMachineColumns()
+    const { id, value, label, shift, starting_point }: Machine = await request.json()
 
     if (!id || !value || !label) {
       return NextResponse.json(
@@ -85,8 +98,8 @@ export async function PUT(request: NextRequest) {
     const oldValue = existing.rows[0]?.value
 
     const result = await dbQuery<Machine>(
-      "UPDATE machines SET value = $1, label = $2, shift = $3, updated_at = NOW() WHERE id = $4 RETURNING id, value, label, shift",
-      [value, label, normalizeShift(shift), id]
+      "UPDATE machines SET value = $1, label = $2, shift = $3, starting_point = $4, updated_at = NOW() WHERE id = $5 RETURNING id, value, label, shift, starting_point",
+      [value, label, normalizeShift(shift), starting_point ?? null, id]
     )
 
     if (result.rows.length === 0) {

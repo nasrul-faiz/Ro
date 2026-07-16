@@ -21,8 +21,41 @@ interface DeliveryOrder {
   items?: DOItem[]
 }
 
+async function ensureDeliveryOrdersTables() {
+  await dbQuery(`
+    CREATE TABLE IF NOT EXISTS delivery_orders (
+      id SERIAL PRIMARY KEY,
+      code VARCHAR(50) NOT NULL UNIQUE,
+      machine_id VARCHAR(50) NOT NULL,
+      machine_label VARCHAR(255) NOT NULL,
+      date DATE NOT NULL,
+      status VARCHAR(20) DEFAULT 'pending',
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    )
+  `)
+  await dbQuery(`
+    CREATE TABLE IF NOT EXISTS delivery_order_items (
+      id SERIAL PRIMARY KEY,
+      delivery_order_id INTEGER NOT NULL REFERENCES delivery_orders(id) ON DELETE CASCADE,
+      slot VARCHAR(50) NOT NULL,
+      product_code VARCHAR(100) NOT NULL,
+      product_name VARCHAR(255) NOT NULL,
+      qty INTEGER NOT NULL DEFAULT 0,
+      created_at TIMESTAMP DEFAULT NOW()
+    )
+  `)
+  await dbQuery(
+    "CREATE INDEX IF NOT EXISTS idx_delivery_orders_machine_id ON delivery_orders(machine_id)"
+  )
+  await dbQuery(
+    "CREATE INDEX IF NOT EXISTS idx_delivery_order_items_order_id ON delivery_order_items(delivery_order_id)"
+  )
+}
+
 export async function GET(request: NextRequest) {
   try {
+    await ensureDeliveryOrdersTables()
     const { searchParams } = new URL(request.url)
     const code = searchParams.get("code")
 
@@ -69,6 +102,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    await ensureDeliveryOrdersTables()
     const { code, machine_id, machine_label, date, items }: DeliveryOrder & { items: DOItem[] } = await request.json()
 
     if (!code || !machine_id || !machine_label || !date || !items) {
@@ -117,6 +151,7 @@ export async function POST(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
+    await ensureDeliveryOrdersTables()
     const { code, status }: { code: string; status: "pending" | "completed" } = await request.json()
 
     if (!code || !status) {

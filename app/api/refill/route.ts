@@ -18,8 +18,30 @@ interface RefillItem {
   maxCapacity: number
 }
 
+async function ensureRefillTable() {
+  await dbQuery(`
+    CREATE TABLE IF NOT EXISTS refill_items (
+      id SERIAL PRIMARY KEY,
+      machine_id VARCHAR(50) NOT NULL,
+      slot VARCHAR(50) NOT NULL,
+      product_code VARCHAR(100),
+      product_name VARCHAR(255),
+      image TEXT DEFAULT '',
+      stock_in INTEGER DEFAULT 0,
+      overflow INTEGER DEFAULT 0,
+      stock_out INTEGER DEFAULT 0,
+      current_inventory INTEGER DEFAULT 0,
+      max_capacity INTEGER DEFAULT 0,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW(),
+      UNIQUE(machine_id, slot)
+    )
+  `)
+}
+
 export async function GET(request: NextRequest) {
   try {
+    await ensureRefillTable()
     const { searchParams } = new URL(request.url)
     const machineId = searchParams.get("machine_id")
 
@@ -60,6 +82,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    await ensureRefillTable()
     const items: RefillItem[] = await request.json()
 
     if (!Array.isArray(items) || items.length === 0) {
@@ -113,6 +136,7 @@ export async function POST(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
+    await ensureRefillTable()
     const payload: RefillItem | RefillItem[] = await request.json()
 
     if (Array.isArray(payload)) {
@@ -207,6 +231,7 @@ export async function PUT(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
+    await ensureRefillTable()
     const { searchParams } = new URL(request.url)
     const machineId = searchParams.get("machine_id")
     const slot = searchParams.get("slot")

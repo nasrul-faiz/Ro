@@ -10,6 +10,7 @@ interface RouteLocationRow {
   location_code: string
   location_name?: string
   delivery?: string
+  km?: number
 }
 
 async function ensureRouteLocationsTable() {
@@ -23,14 +24,12 @@ async function ensureRouteLocationsTable() {
       UNIQUE(route_id, location_code)
     )
   `)
-
   await dbQuery(
     "CREATE INDEX IF NOT EXISTS idx_route_locations_route_id ON route_locations(route_id)"
   )
-
-  await dbQuery(
-    "CREATE UNIQUE INDEX IF NOT EXISTS idx_route_locations_location_code_unique ON route_locations(location_code)"
-  )
+  // Drop old global unique on location_code if it exists
+  await dbQuery("DROP INDEX IF EXISTS idx_route_locations_location_code_unique")
+  await dbQuery("ALTER TABLE route_locations ADD COLUMN IF NOT EXISTS km NUMERIC(10,2)")
 }
 
 export async function GET(request: NextRequest) {
@@ -49,6 +48,7 @@ export async function GET(request: NextRequest) {
          rl.id,
          rl.route_id,
          rl.location_code,
+         rl.km,
          p.product_name AS location_name,
          COALESCE(p.image, '') AS delivery
        FROM route_locations rl
@@ -73,16 +73,13 @@ export async function POST(request: NextRequest) {
     const payload = await request.json()
 
     if (!Array.isArray(payload) || payload.length === 0) {
-      return NextResponse.json(
-        { error: "Array payload is required" },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: "Array payload is required" }, { status: 400 })
     }
 
     const rows: RouteLocationRow[] = []
 
     for (const item of payload as RouteLocationRow[]) {
-        const routeId = item.route_id?.trim()
+      const routeId = item.route_id?.trim()
       const locationCode = item.location_code?.trim().toUpperCase()
 
       if (!routeId || !locationCode) {
@@ -97,25 +94,22 @@ export async function POST(request: NextRequest) {
         [locationCode]
       )
 
-      if (
-        existing.rows.length > 0 &&
-        existing.rows[0].route_id !== routeId
-      ) {
+      if (existing.rows.length > 0 && existing.rows[0].route_id !== routeId) {
         return NextResponse.json(
-          {
-            error: `Location ${locationCode} is already assigned to another route`,
-          },
+          { error: `Location ${locationCode} is already assigned to another route` },
           { status: 409 }
         )
       }
 
+      const km = item.km != null ? Number(item.km) : null
+
       const result = await dbQuery<RouteLocationRow>(
-        `INSERT INTO route_locations (route_id, location_code)
-         VALUES ($1, $2)
+        `INSERT INTO route_locations (route_id, location_code, km)
+         VALUES ($1, $2, $3)
          ON CONFLICT (route_id, location_code)
-         DO UPDATE SET updated_at = NOW()
-         RETURNING id, route_id, location_code`,
-        [routeId, locationCode]
+         DO UPDATE SET updated_at = NOW(), km = EXCLUDED.km
+         RETURNING id, route_id, location_code, km`,
+        [routeId, locationCode, km]
       )
 
       rows.push(result.rows[0])
@@ -132,7 +126,6 @@ export async function POST(request: NextRequest) {
         { status: 409 }
       )
     }
-
     const message =
       error instanceof Error ? error.message : "Failed to upsert route locations"
     return NextResponse.json({ error: message }, { status: 500 })

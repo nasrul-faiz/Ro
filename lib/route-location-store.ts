@@ -4,6 +4,7 @@ export interface RouteLocation {
   locationCode: string
   locationName?: string
   delivery?: string
+  km?: number
 }
 
 interface ApiRouteLocation {
@@ -12,6 +13,7 @@ interface ApiRouteLocation {
   location_code: string
   location_name?: string
   delivery?: string
+  km?: number
 }
 
 function fromApi(item: ApiRouteLocation): RouteLocation {
@@ -21,6 +23,7 @@ function fromApi(item: ApiRouteLocation): RouteLocation {
     locationCode: item.location_code,
     locationName: item.location_name,
     delivery: item.delivery,
+    km: item.km != null ? Number(item.km) : undefined,
   }
 }
 
@@ -29,6 +32,7 @@ function toApi(item: RouteLocation): ApiRouteLocation {
     id: item.id,
     route_id: item.routeId,
     location_code: item.locationCode,
+    km: item.km,
   }
 }
 
