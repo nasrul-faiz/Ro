@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import Link from "next/link"
+import { ChevronsUpDownIcon } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { getMachines, type Machine } from "@/lib/machine-store"
 import { getProducts, type Product } from "@/lib/product-store"
@@ -12,14 +12,6 @@ import {
   FieldLabel,
 } from "@/components/ui/field"
 import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import {
   Table,
   TableBody,
   TableCell,
@@ -27,30 +19,68 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Button, buttonVariants } from "@/components/ui/button"
+import { Button } from "@/components/ui/button"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
 import { useSidebar } from "@/components/ui/sidebar"
 import { cn } from "@/lib/utils"
+
+const ALL_ROUTES_VALUE = "__all_routes__"
+
+interface HomeContentCache {
+  machines: Machine[]
+  products: Product[]
+  assignments: RouteLocation[]
+}
+
+let homeContentCache: HomeContentCache | null = null
+
+function findSelectedRoute(machines: Machine[], routeId?: string) {
+  if (!routeId) return null
+  return machines.find((item) => item.value === routeId) ?? null
+}
 
 interface HomeContentProps {
   initialRouteId?: string
 }
 
 export function HomeContent({ initialRouteId }: HomeContentProps) {
-  const [machines, setMachines] = React.useState<Machine[]>([])
-  const [products, setProducts] = React.useState<Product[]>([])
-  const [assignments, setAssignments] = React.useState<RouteLocation[]>([])
-  const [loading, setLoading] = React.useState(true)
-  const [selectedRoute, setSelectedRoute] = React.useState<Machine | null>(null)
+  const [machines, setMachines] = React.useState<Machine[]>(() => homeContentCache?.machines ?? [])
+  const [products, setProducts] = React.useState<Product[]>(() => homeContentCache?.products ?? [])
+  const [assignments, setAssignments] = React.useState<RouteLocation[]>(() => homeContentCache?.assignments ?? [])
+  const [loading, setLoading] = React.useState(() => homeContentCache === null)
+  const [selectedRoute, setSelectedRoute] = React.useState<Machine | null>(() =>
+    findSelectedRoute(homeContentCache?.machines ?? [], initialRouteId)
+  )
+  const [routePickerOpen, setRoutePickerOpen] = React.useState(false)
+  const [searchQuery, setSearchQuery] = React.useState("")
   const router = useRouter()
   const { isMobile, setOpen, setOpenMobile } = useSidebar()
 
   React.useEffect(() => {
+    let cancelled = false
+
     Promise.all([getMachines(), getProducts(), getRouteLocations()]).then(([machinesData, productsData, routeLocations]) => {
+      if (cancelled) return
+
+      homeContentCache = {
+        machines: machinesData,
+        products: productsData,
+        assignments: routeLocations,
+      }
+
       setMachines(machinesData)
       setProducts(productsData)
       setAssignments(routeLocations)
       setLoading(false)
     })
+
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   React.useEffect(() => {
@@ -83,9 +113,19 @@ export function HomeContent({ initialRouteId }: HomeContentProps) {
     [machines]
   )
 
+  const filteredItems = React.useMemo(() => {
+    const keyword = searchQuery.trim().toLowerCase()
+    if (!keyword) return items
+
+    return items.filter((item) => item.label.toLowerCase().includes(keyword))
+  }, [items, searchQuery])
+
   function handleSelectRoute(value: string | null) {
-    const machine = machines.find((item) => item.value === value) ?? null
+    const nextValue = value === ALL_ROUTES_VALUE ? null : value
+    const machine = machines.find((item) => item.value === nextValue) ?? null
     setSelectedRoute(machine)
+    setRoutePickerOpen(false)
+    setSearchQuery("")
 
     if (isMobile) {
       setOpenMobile(false)
@@ -93,72 +133,80 @@ export function HomeContent({ initialRouteId }: HomeContentProps) {
       setOpen(false)
     }
 
-    if (!value) {
+    if (!nextValue) {
       router.push("/home")
       return
     }
 
-    router.push(`/home/${encodeURIComponent(value)}`)
+    router.push(`/home/${encodeURIComponent(nextValue)}`)
   }
 
   const hasInvalidRoute = Boolean(initialRouteId) && !loading && !selectedRoute
 
-  function handleRouteLinkClick() {
-    if (isMobile) {
-      setOpenMobile(false)
-      return
-    }
-
-    setOpen(false)
-  }
-
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-3 rounded-xl border bg-card p-4">
-        <div className="flex flex-wrap gap-2">
-          <Link
-            href="/home"
-            onClick={handleRouteLinkClick}
-            className={cn(
-              buttonVariants({ variant: !selectedRoute ? "default" : "outline", size: "sm" })
-            )}
-          >
-            All routes
-          </Link>
-          {machines.map((machine) => {
-            const isActive = machine.value === selectedRoute?.value
-
-            return (
-              <Link
-                key={machine.value}
-                href={`/home/${encodeURIComponent(machine.value)}`}
-                onClick={handleRouteLinkClick}
-                className={cn(
-                  buttonVariants({ variant: isActive ? "default" : "outline", size: "sm" })
-                )}
-              >
-                {machine.label}
-              </Link>
-            )
-          })}
-        </div>
-
+      <div className="flex flex-col gap-3">
         <Field className="w-full max-w-xl">
           <FieldLabel>Route</FieldLabel>
-          <Select value={selectedRoute?.value ?? undefined} onValueChange={handleSelectRoute}>
-            <SelectTrigger>
-              <SelectValue placeholder="Select route" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                {items.map((item) => (
-                  <SelectItem key={item.value} value={item.value}>
-                    {item.label}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
+          <Popover open={routePickerOpen} onOpenChange={setRoutePickerOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                type="button"
+                variant="outline"
+                role="combobox"
+                aria-expanded={routePickerOpen}
+                className="h-9 w-full justify-between px-3 font-normal"
+              >
+                {selectedRoute ? `${selectedRoute.value} — ${selectedRoute.label}` : "All routes"}
+                <ChevronsUpDownIcon className="ml-2 size-4 shrink-0 opacity-50" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent
+              side="bottom"
+              align="start"
+              className="w-[var(--radix-popover-trigger-width)] p-0"
+            >
+              <div className="border-b px-3 py-2">
+                <input
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  placeholder="Type route code or name..."
+                  className="h-8 w-full border-0 bg-transparent px-0 text-sm outline-none"
+                />
+              </div>
+              <div className="max-h-64 overflow-y-auto py-1">
+                <button
+                  type="button"
+                  onClick={() => handleSelectRoute(ALL_ROUTES_VALUE)}
+                  className={cn(
+                    "w-full px-3 py-2 text-left text-sm hover:bg-muted",
+                    !selectedRoute && "bg-muted"
+                  )}
+                >
+                  All routes
+                </button>
+                {filteredItems.length === 0 ? (
+                  <p className="px-3 py-6 text-center text-sm text-muted-foreground">
+                    No matching route.
+                  </p>
+                ) : (
+                  filteredItems.map((item) => (
+                    <button
+                      key={item.value}
+                      type="button"
+                      onClick={() => handleSelectRoute(item.value)}
+                      className={cn(
+                        "w-full px-3 py-2 text-left text-sm hover:bg-muted",
+                        selectedRoute?.value === item.value && "bg-muted"
+                      )}
+                    >
+                      {item.label}
+                    </button>
+                  ))
+                )}
+              </div>
+            </PopoverContent>
+          </Popover>
           <FieldDescription>Each route now has its own URL, so you can open or share it directly.</FieldDescription>
         </Field>
       </div>
@@ -217,7 +265,7 @@ export function HomeContent({ initialRouteId }: HomeContentProps) {
         </div>
       ) : (
         <div className="rounded-xl border border-dashed bg-muted/20 p-10 text-center text-sm text-muted-foreground">
-          {loading ? "Loading routes..." : "Select a route link above to view its assigned locations."}
+          {loading ? "Loading routes..." : "Select a route from the dropdown to view its assigned locations."}
         </div>
       )}
     </div>

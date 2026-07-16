@@ -25,6 +25,10 @@ const inputCls =
 
 const deliveryOptions = ["Daily", "WD", "Alt 1", "Alt 2", "WE", "WA"] as const
 
+function compareProductsByCode(a: Product, b: Product) {
+  return a.productCode.localeCompare(b.productCode)
+}
+
 interface EditRowProps {
   draft: Product
   onDraftChange: (product: Product) => void
@@ -155,6 +159,32 @@ export function EditProductsContent({ onSaveRef }: EditProductsContentProps) {
         .map(([code]) => code)
     )
   }, [allProductRows])
+
+  const sortedPendingDraftKeys = React.useMemo(
+    () =>
+      pendingDraftKeys
+        .filter((key) => !products.some((product) => product.productCode === key) && drafts[key])
+        .sort((leftKey, rightKey) => {
+          const leftCode = drafts[leftKey]?.productCode ?? ""
+          const rightCode = drafts[rightKey]?.productCode ?? ""
+
+          return leftCode.localeCompare(rightCode)
+        }),
+    [drafts, pendingDraftKeys, products]
+  )
+
+  const sortedProducts = React.useMemo(() => {
+    return [...products].sort((leftItem, rightItem) => {
+      const leftDraft = pendingDraftKeys.includes(leftItem.productCode)
+        ? drafts[leftItem.productCode]
+        : undefined
+      const rightDraft = pendingDraftKeys.includes(rightItem.productCode)
+        ? drafts[rightItem.productCode]
+        : undefined
+
+      return compareProductsByCode(leftDraft ?? leftItem, rightDraft ?? rightItem)
+    })
+  }, [drafts, pendingDraftKeys, products])
 
   const handleSaveAll = React.useCallback(async () => {
     setSaveError(null)
@@ -362,9 +392,7 @@ export function EditProductsContent({ onSaveRef }: EditProductsContentProps) {
                 onCancel={cancelEdit}
               />
             )}
-            {pendingDraftKeys
-              .filter((key) => !products.some((product) => product.productCode === key) && drafts[key])
-              .map((key) => {
+            {sortedPendingDraftKeys.map((key) => {
                 const draft = drafts[key]
                 if (!draft) return null
                 const normalizedCode = draft.productCode.trim().toUpperCase()
@@ -415,7 +443,7 @@ export function EditProductsContent({ onSaveRef }: EditProductsContentProps) {
                   </TableRow>
                 )
               })}
-            {products.map((item) => {
+            {sortedProducts.map((item) => {
               if (editingCode === item.productCode && drafts[item.productCode]) {
                 const normalizedCode = drafts[item.productCode].productCode.trim().toUpperCase()
                 return (

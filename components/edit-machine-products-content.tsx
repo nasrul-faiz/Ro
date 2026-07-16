@@ -3,8 +3,6 @@
 import * as React from "react"
 import {
   PlusIcon,
-  PencilIcon,
-  Trash2Icon,
   CheckIcon,
   XIcon,
 } from "lucide-react"
@@ -102,7 +100,6 @@ export function EditMachineProductsContent({ onSaveRef }: EditMachineProductsCon
   const [drafts, setDrafts] = React.useState<Record<string, AssignmentDraft>>({})
   const [loading, setLoading] = React.useState(true)
   const [selectedRouteId, setSelectedRouteId] = React.useState("")
-  const [editingKey, setEditingKey] = React.useState<string | null>(null)
   const [adding, setAdding] = React.useState(false)
   const [activeAddDraftKey, setActiveAddDraftKey] = React.useState<string | null>(null)
   const [pendingDraftKeys, setPendingDraftKeys] = React.useState<string[]>([])
@@ -206,7 +203,6 @@ export function EditMachineProductsContent({ onSaveRef }: EditMachineProductsCon
 
     setDrafts({})
     setAdding(false)
-    setEditingKey(null)
     setActiveAddDraftKey(null)
     setPendingDraftKeys([])
   }, [drafts, pendingDraftKeys])
@@ -229,24 +225,8 @@ export function EditMachineProductsContent({ onSaveRef }: EditMachineProductsCon
   function startAdd() {
     const draftKey = `new-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
     setAdding(true)
-    setEditingKey(null)
     setActiveAddDraftKey(draftKey)
     setDrafts((prev) => ({ ...prev, [draftKey]: { ...newAssignment, routeId: selectedRouteId } }))
-  }
-
-  function startEdit(key: string) {
-    const assignment = assignments.find((item) => assignmentKey(item) === key)
-    if (assignment) {
-      setEditingKey(key)
-      setDrafts((prev) => ({
-        ...prev,
-        [key]: {
-          routeId: assignment.routeId,
-          locationCode: assignment.locationCode,
-          originalLocationCode: assignment.locationCode,
-        },
-      }))
-    }
   }
 
   function confirmDraft() {
@@ -255,12 +235,6 @@ export function EditMachineProductsContent({ onSaveRef }: EditMachineProductsCon
       setPendingDraftKeys((prev) => (prev.includes(key) ? prev : [...prev, key]))
       setAdding(false)
       setActiveAddDraftKey(null)
-      return
-    }
-
-    if (editingKey && drafts[editingKey]) {
-      setPendingDraftKeys((prev) => (prev.includes(editingKey) ? prev : [...prev, editingKey]))
-      setEditingKey(null)
     }
   }
 
@@ -281,11 +255,6 @@ export function EditMachineProductsContent({ onSaveRef }: EditMachineProductsCon
       removeDraft(activeAddDraftKey)
     }
 
-    if (editingKey) {
-      removeDraft(editingKey)
-    }
-
-    setEditingKey(null)
     setAdding(false)
   }
 
@@ -314,7 +283,6 @@ export function EditMachineProductsContent({ onSaveRef }: EditMachineProductsCon
               onChange={(e) => {
                 setSelectedRouteId(e.target.value)
                 setAdding(false)
-                setEditingKey(null)
                 setNewAssignment((prev) => ({
                   ...prev,
                   routeId: e.target.value,
@@ -332,7 +300,7 @@ export function EditMachineProductsContent({ onSaveRef }: EditMachineProductsCon
           <Button
             size="sm"
             className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
-            disabled={!selectedRouteId || products.length === 0 || editingKey !== null || adding}
+            disabled={!selectedRouteId || products.length === 0 || adding}
             onClick={startAdd}
           >
             <PlusIcon className="size-3.5" />
@@ -385,24 +353,12 @@ export function EditMachineProductsContent({ onSaveRef }: EditMachineProductsCon
                       </span>
                     </TableCell>
                     <TableCell className="py-1.5">
-                      <div className="flex justify-center gap-1">
-                        <button
-                          onClick={() => {
-                            setAdding(true)
-                            setEditingKey(null)
-                            setActiveAddDraftKey(key)
-                          }}
-                          className="rounded p-1 hover:bg-muted text-muted-foreground hover:text-foreground"
-                        >
-                          <PencilIcon className="size-3.5" />
-                        </button>
+                      <div className="flex justify-center">
                         <ConfirmDeleteDialog
                           trigger={
-                            <button
-                              className="rounded p-1 hover:bg-red-100 dark:hover:bg-red-900/40 text-muted-foreground hover:text-red-500"
-                            >
-                              <Trash2Icon className="size-3.5" />
-                            </button>
+                            <Button variant="destructive" size="sm">
+                              Remove
+                            </Button>
                           }
                           title="Remove pending location?"
                           description="This pending location draft will be discarded."
@@ -415,19 +371,6 @@ export function EditMachineProductsContent({ onSaveRef }: EditMachineProductsCon
               {visibleAssignments.map((assignment) => {
                 const key = assignmentKey(assignment)
                 const location = productMap.get(assignment.locationCode)
-
-                if (editingKey === key && drafts[key]) {
-                  return (
-                    <AssignmentEditRow
-                      key={key}
-                      availableProducts={getAvailableProducts(drafts[key])}
-                      draft={drafts[key]}
-                      onDraftChange={(draft) => updateDraft(key, draft)}
-                      onConfirm={confirmDraft}
-                      onCancel={cancelEdit}
-                    />
-                  )
-                }
 
                 const pendingDraft = pendingDraftKeys.includes(key) ? drafts[key] : undefined
                 const displayLocationCode = pendingDraft?.locationCode ?? assignment.locationCode
@@ -454,20 +397,12 @@ export function EditMachineProductsContent({ onSaveRef }: EditMachineProductsCon
                       )}
                     </TableCell>
                     <TableCell className="py-1.5">
-                      <div className="flex justify-center gap-1">
-                        <button
-                          onClick={() => startEdit(key)}
-                          className="rounded p-1 hover:bg-muted text-muted-foreground hover:text-foreground"
-                        >
-                          <PencilIcon className="size-3.5" />
-                        </button>
+                      <div className="flex justify-center">
                         <ConfirmDeleteDialog
                           trigger={
-                            <button
-                              className="rounded p-1 hover:bg-red-100 dark:hover:bg-red-900/40 text-muted-foreground hover:text-red-500"
-                            >
-                              <Trash2Icon className="size-3.5" />
-                            </button>
+                            <Button variant="destructive" size="sm">
+                              Remove
+                            </Button>
                           }
                           title="Delete route location?"
                           description="This will remove the location assignment from the selected route."
