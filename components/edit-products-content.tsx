@@ -31,6 +31,14 @@ import { Input } from "@/components/ui/input"
 import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog"
 import { LoadingText } from "@/components/ui/loading-text"
 import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuGroup,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu"
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -232,6 +240,7 @@ export function EditProductsContent({ onSaveRef }: EditProductsContentProps) {
   const [pendingDraftKeys, setPendingDraftKeys] = React.useState<string[]>([])
   const [saveError, setSaveError] = React.useState<string | null>(null)
   const [searchQuery, setSearchQuery] = React.useState("")
+  const [contextDeleteTarget, setContextDeleteTarget] = React.useState<{ kind: "saved" | "pending"; code: string } | null>(null)
 
   // Coordinate drafts: productCode → { lat, lng }
   const [coordDrafts, setCoordDrafts] = React.useState<Record<string, { lat: number; lng: number }>>({})
@@ -624,29 +633,49 @@ export function EditProductsContent({ onSaveRef }: EditProductsContentProps) {
               const code = draft.productCode.trim().toUpperCase()
               const hasDup = code ? duplicateCodes.has(code) : false
               return (
-                <TableRow key={key} className="h-10 bg-emerald-50/60 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-300">
-                  <TableCell className={`py-1.5 text-center font-mono ${hasDup ? "text-red-600" : ""}`}>
-                    {draft.productCode}
-                    {hasDup && <span className="ml-1 text-[10px] text-red-600 font-medium">Dup</span>}
-                  </TableCell>
-                  <TableCell className="py-1.5 text-center font-medium">{draft.productName}</TableCell>
-                  <TableCell className="py-1.5 text-center">{draft.image || "-"}</TableCell>
-                  <TableCell className="py-1.5 text-center text-muted-foreground/40 italic text-[11px]">Save first</TableCell>
-                  <TableCell className="py-1.5">
-                    <div className="flex justify-center gap-1">
-                      <button onClick={() => { setAdding(true); setEditingCode(null); setActiveAddDraftKey(key) }}
-                        className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground">
-                        <PencilIcon className="size-3.5" />
-                      </button>
-                      <ConfirmDeleteDialog
-                        trigger={<button className="rounded p-1 text-muted-foreground hover:bg-red-100 hover:text-red-500 dark:hover:bg-red-900/40"><Trash2Icon className="size-3.5" /></button>}
-                        title="Remove pending location?"
-                        description="This pending draft will be discarded."
-                        onConfirm={() => removeDraft(key)}
-                      />
-                    </div>
-                  </TableCell>
-                </TableRow>
+                <ContextMenu key={key}>
+                  <ContextMenuTrigger asChild>
+                    <TableRow className="h-10 bg-emerald-50/60 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-300">
+                      <TableCell className={`py-1.5 text-center font-mono ${hasDup ? "text-red-600" : ""}`}>
+                        {draft.productCode}
+                        {hasDup && <span className="ml-1 text-[10px] text-red-600 font-medium">Dup</span>}
+                      </TableCell>
+                      <TableCell className="py-1.5 text-center font-medium">{draft.productName}</TableCell>
+                      <TableCell className="py-1.5 text-center">{draft.image || "-"}</TableCell>
+                      <TableCell className="py-1.5 text-center text-muted-foreground/40 italic text-[11px]">Save first</TableCell>
+                      <TableCell className="py-1.5">
+                        <div className="flex justify-center gap-1">
+                          <button onClick={() => { setAdding(true); setEditingCode(null); setActiveAddDraftKey(key) }}
+                            className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground">
+                            <PencilIcon className="size-3.5" />
+                          </button>
+                          <button onClick={() => setContextDeleteTarget({ kind: "pending", code: key })}
+                            className="rounded p-1 text-muted-foreground hover:bg-red-100 hover:text-red-500 dark:hover:bg-red-900/40">
+                            <Trash2Icon className="size-3.5" />
+                          </button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  </ContextMenuTrigger>
+                  <ContextMenuContent>
+                    <ContextMenuGroup>
+                      <ContextMenuItem onClick={() => { setAdding(true); setEditingCode(null); setActiveAddDraftKey(key) }}>
+                        <PencilIcon />
+                        Edit
+                      </ContextMenuItem>
+                    </ContextMenuGroup>
+                    <ContextMenuSeparator />
+                    <ContextMenuGroup>
+                      <ContextMenuItem
+                        variant="destructive"
+                        onClick={() => setContextDeleteTarget({ kind: "pending", code: key })}
+                      >
+                        <Trash2Icon />
+                        Delete
+                      </ContextMenuItem>
+                    </ContextMenuGroup>
+                  </ContextMenuContent>
+                </ContextMenu>
               )
             })}
 
@@ -672,35 +701,55 @@ export function EditProductsContent({ onSaveRef }: EditProductsContentProps) {
               const isPending = !!pendingDraft || !!effCoord
 
               return (
-                <TableRow key={item.productCode} className={`h-10 ${isPending ? "text-orange-800 dark:text-orange-300" : ""}`}>
-                  <TableCell className="text-center py-1.5 font-mono text-muted-foreground">
-                    {display.productCode}
-                    {isPending && <span className="ml-1 text-[10px] text-emerald-600 font-medium uppercase">•</span>}
-                  </TableCell>
-                  <TableCell className="py-1.5 text-center font-medium truncate max-w-[200px]">
-                    {display.productName}
-                  </TableCell>
-                  <TableCell className="py-1.5 text-center text-muted-foreground">
-                    {display.image || "-"}
-                  </TableCell>
-                  <TableCell className="py-1.5 text-center">
-                    <CoordButton code={item.productCode} lat={lat} lng={lng} />
-                  </TableCell>
-                  <TableCell className="py-1.5">
-                    <div className="flex justify-center gap-1">
-                      <button onClick={() => startEdit(item.productCode)}
-                        className="rounded p-1 hover:bg-muted text-muted-foreground hover:text-foreground">
-                        <PencilIcon className="size-3.5" />
-                      </button>
-                      <ConfirmDeleteDialog
-                        trigger={<button className="rounded p-1 hover:bg-red-100 dark:hover:bg-red-900/40 text-muted-foreground hover:text-red-500"><Trash2Icon className="size-3.5" /></button>}
-                        title="Delete location?"
-                        description="This will permanently delete this location."
-                        onConfirm={() => handleDelete(item.productCode)}
-                      />
-                    </div>
-                  </TableCell>
-                </TableRow>
+                <ContextMenu key={item.productCode}>
+                  <ContextMenuTrigger asChild>
+                    <TableRow className={`h-10 ${isPending ? "text-orange-800 dark:text-orange-300" : ""}`}>
+                      <TableCell className="text-center py-1.5 font-mono text-muted-foreground">
+                        {display.productCode}
+                        {isPending && <span className="ml-1 text-[10px] text-emerald-600 font-medium uppercase">•</span>}
+                      </TableCell>
+                      <TableCell className="py-1.5 text-center font-medium truncate max-w-[200px]">
+                        {display.productName}
+                      </TableCell>
+                      <TableCell className="py-1.5 text-center text-muted-foreground">
+                        {display.image || "-"}
+                      </TableCell>
+                      <TableCell className="py-1.5 text-center">
+                        <CoordButton code={item.productCode} lat={lat} lng={lng} />
+                      </TableCell>
+                      <TableCell className="py-1.5">
+                        <div className="flex justify-center gap-1">
+                          <button onClick={() => startEdit(item.productCode)}
+                            className="rounded p-1 hover:bg-muted text-muted-foreground hover:text-foreground">
+                            <PencilIcon className="size-3.5" />
+                          </button>
+                          <button onClick={() => setContextDeleteTarget({ kind: "saved", code: item.productCode })}
+                            className="rounded p-1 hover:bg-red-100 dark:hover:bg-red-900/40 text-muted-foreground hover:text-red-500">
+                            <Trash2Icon className="size-3.5" />
+                          </button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  </ContextMenuTrigger>
+                  <ContextMenuContent>
+                    <ContextMenuGroup>
+                      <ContextMenuItem onClick={() => startEdit(item.productCode)}>
+                        <PencilIcon />
+                        Edit
+                      </ContextMenuItem>
+                    </ContextMenuGroup>
+                    <ContextMenuSeparator />
+                    <ContextMenuGroup>
+                      <ContextMenuItem
+                        variant="destructive"
+                        onClick={() => setContextDeleteTarget({ kind: "saved", code: item.productCode })}
+                      >
+                        <Trash2Icon />
+                        Delete
+                      </ContextMenuItem>
+                    </ContextMenuGroup>
+                  </ContextMenuContent>
+                </ContextMenu>
               )
             })}
 
@@ -714,6 +763,23 @@ export function EditProductsContent({ onSaveRef }: EditProductsContentProps) {
           </TableBody>
         </Table>
       </div>
+
+      <ConfirmDeleteDialog
+        open={!!contextDeleteTarget}
+        onOpenChange={(o) => { if (!o) setContextDeleteTarget(null) }}
+        title={contextDeleteTarget?.kind === "pending" ? "Remove pending location?" : "Delete location?"}
+        description={
+          contextDeleteTarget?.kind === "pending"
+            ? "This pending draft will be discarded."
+            : "This will permanently delete this location."
+        }
+        onConfirm={() => {
+          if (!contextDeleteTarget) return
+          if (contextDeleteTarget.kind === "pending") removeDraft(contextDeleteTarget.code)
+          else handleDelete(contextDeleteTarget.code)
+          setContextDeleteTarget(null)
+        }}
+      />
     </div>
   )
 }

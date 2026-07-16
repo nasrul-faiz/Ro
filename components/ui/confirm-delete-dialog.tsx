@@ -17,7 +17,9 @@ import {
 } from "@/components/ui/alert-dialog"
 
 interface ConfirmDeleteDialogProps {
-  trigger: React.ReactElement
+  trigger?: React.ReactElement
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
   title?: string
   description?: string
   onConfirm: () => void
@@ -25,13 +27,15 @@ interface ConfirmDeleteDialogProps {
 
 export function ConfirmDeleteDialog({
   trigger,
+  open,
+  onOpenChange,
   title = "Delete item?",
   description = "This action cannot be undone.",
   onConfirm,
 }: ConfirmDeleteDialogProps) {
   return (
-    <AlertDialog>
-      <AlertDialogTrigger render={trigger} />
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
+      {trigger && <AlertDialogTrigger render={trigger} />}
       <AlertDialogContent size="sm">
         <AlertDialogHeader>
           <AlertDialogMedia className="bg-destructive/10 text-destructive dark:bg-destructive/20 dark:text-destructive">
