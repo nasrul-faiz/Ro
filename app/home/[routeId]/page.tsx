@@ -11,7 +11,7 @@ export default async function HomeRoutePage({ params }: HomeRoutePageProps) {
   const { routeId } = await params
 
   return (
-    <AppLayout title="Route List">
+    <AppLayout title="Route List" defaultSidebarOpen={false}>
       <HomeContent initialRouteId={routeId} />
     </AppLayout>
   )

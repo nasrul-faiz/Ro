@@ -79,17 +79,22 @@ const settingsItems = [
 
 interface AppLayoutProps {
   title: string
+  defaultSidebarOpen?: boolean
   children: React.ReactNode
 }
 
-export function AppLayout({ title, children }: AppLayoutProps) {
+export function AppLayout({
+  title,
+  defaultSidebarOpen,
+  children,
+}: AppLayoutProps) {
   const pathname = usePathname()
   const router = useRouter()
 
   const activeWorkspace =
     workspaces.find((ws) => pathname.startsWith(ws.url)) ?? workspaces[0]
   const navItems = activeWorkspace.id === "edit" ? editNavItems : defaultNavItems
-  const sidebarDefaultOpen = activeWorkspace.id !== "edit"
+  const sidebarDefaultOpen = defaultSidebarOpen ?? activeWorkspace.id !== "edit"
 
   return (
     <SidebarProvider defaultOpen={sidebarDefaultOpen}>
