@@ -254,22 +254,29 @@ export function EditProductsContent({ onSaveRef }: EditProductsContentProps) {
   // ── Derived ───────────────────────────────────────────────────────────────
   const duplicateCodes = React.useMemo(() => {
     const counts = new Map<string, number>()
-    for (const key of pendingDraftKeys) {
-      // Edits to an existing product are already accounted for in the loop
-      // below (which reads the pending draft for that product). Counting
-      // them again here would double-count the same location and falsely
-      // flag it as a duplicate.
-      if (products.some((p) => p.productCode === key)) continue
+
+    // Existing products: use the live draft when one exists (whether it has
+    // already been confirmed with the checkmark or is still being typed) so
+    // collisions are caught immediately instead of only at save time. Each
+    // existing product is counted exactly once here.
+    for (const p of products) {
+      const d = drafts[p.productCode] ?? p
+      const code = d.productCode.trim().toUpperCase()
+      if (code) counts.set(code, (counts.get(code) ?? 0) + 1)
+    }
+
+    // Brand-new (not-yet-saved) drafts: confirmed pending ones plus the one
+    // currently being typed in the "Add Location" row.
+    const newKeys = new Set(pendingDraftKeys.filter((k) => !products.some((p) => p.productCode === k)))
+    if (activeAddDraftKey) newKeys.add(activeAddDraftKey)
+
+    for (const key of newKeys) {
       const code = drafts[key]?.productCode.trim().toUpperCase()
       if (code) counts.set(code, (counts.get(code) ?? 0) + 1)
     }
-    for (const p of products) {
-      const d = pendingDraftKeys.includes(p.productCode) ? drafts[p.productCode] : p
-      const code = d?.productCode.trim().toUpperCase()
-      if (code) counts.set(code, (counts.get(code) ?? 0) + 1)
-    }
+
     return new Set(Array.from(counts.entries()).filter(([, n]) => n > 1).map(([c]) => c))
-  }, [products, drafts, pendingDraftKeys])
+  }, [products, drafts, pendingDraftKeys, activeAddDraftKey])
 
   const sortedNewDraftKeys = React.useMemo(() =>
     pendingDraftKeys
@@ -425,7 +432,12 @@ export function EditProductsContent({ onSaveRef }: EditProductsContentProps) {
 
   function startEdit(code: string) {
     const product = products.find((p) => p.productCode === code)
-    if (product) { setEditingCode(code); setDrafts((prev) => ({ ...prev, [code]: { ...product } })) }
+    if (product) {
+      setEditingCode(code)
+      // Preserve an already-staged (but unsaved) edit for this row instead of
+      // reverting it back to the original values when re-opening for edit.
+      setDrafts((prev) => ({ ...prev, [code]: prev[code] ?? { ...product } }))
+    }
   }
 
   function confirmDraft() {

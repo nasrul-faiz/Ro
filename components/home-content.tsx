@@ -342,13 +342,13 @@ export function HomeContent({ initialRouteId }: HomeContentProps) {
                           hasDeliveryToday && "hover:bg-emerald-50/40 dark:hover:bg-emerald-950/20"
                         )}
                       >
-                        <TableCell className="py-1.5 px-4 text-center font-mono font-bold tracking-wider">
+                        <TableCell className="py-1.5 px-4 text-center font-medium">
                           {assignment.locationCode}
                         </TableCell>
-                        <TableCell className="py-1.5 px-4 text-center text-muted-foreground">
+                        <TableCell className="py-1.5 px-4 text-center font-medium">
                           {product?.productName ?? assignment.locationName ?? "Unknown"}
                         </TableCell>
-                        <TableCell className="py-1.5 px-4 text-center text-muted-foreground tabular-nums">
+                        <TableCell className="py-1.5 px-4 text-center font-medium tabular-nums">
                           {assignment.km != null ? (
                             <span>{assignment.km} km</span>
                           ) : (

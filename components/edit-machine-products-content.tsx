@@ -365,7 +365,7 @@ export function EditMachineProductsContent({ onSaveRef }: EditMachineProductsCon
                   const km = getKm(draft.locationCode ?? "")
                   return (
                     <TableRow key={key} className="h-10 bg-emerald-50/60 dark:bg-emerald-950/20">
-                      <TableCell className="text-center py-1.5 font-mono font-bold tracking-wider">
+                      <TableCell className="text-center py-1.5 font-medium">
                         {draft.locationCode}
                       </TableCell>
                       <TableCell className="py-1.5 text-center font-medium">
@@ -375,7 +375,7 @@ export function EditMachineProductsContent({ onSaveRef }: EditMachineProductsCon
                       <TableCell className="text-center py-1.5 text-muted-foreground">
                         {product?.image || "-"}
                       </TableCell>
-                      <TableCell className="text-center py-1.5 text-muted-foreground tabular-nums">
+                      <TableCell className="text-center py-1.5 font-medium tabular-nums">
                         {km === undefined ? "Calculating…" : km != null ? `${km} km` : "—"}
                       </TableCell>
                       <TableCell className="py-1.5">
@@ -400,7 +400,7 @@ export function EditMachineProductsContent({ onSaveRef }: EditMachineProductsCon
 
                 return (
                   <TableRow key={key} className="h-10">
-                    <TableCell className="text-center py-1.5 font-mono font-bold tracking-wider">
+                    <TableCell className="text-center py-1.5 font-medium">
                       {assignment.locationCode}
                     </TableCell>
                     <TableCell className="py-1.5 text-center font-medium">
@@ -409,7 +409,7 @@ export function EditMachineProductsContent({ onSaveRef }: EditMachineProductsCon
                     <TableCell className="text-center py-1.5 text-muted-foreground">
                       {product?.image || assignment.delivery || "-"}
                     </TableCell>
-                    <TableCell className="text-center py-1.5 text-muted-foreground tabular-nums">
+                    <TableCell className="text-center py-1.5 font-medium tabular-nums">
                       {km === undefined ? (
                         <span className="text-muted-foreground/40 text-[11px] italic">Calculating…</span>
                       ) : km != null ? (
