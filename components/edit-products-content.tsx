@@ -255,6 +255,11 @@ export function EditProductsContent({ onSaveRef }: EditProductsContentProps) {
   const duplicateCodes = React.useMemo(() => {
     const counts = new Map<string, number>()
     for (const key of pendingDraftKeys) {
+      // Edits to an existing product are already accounted for in the loop
+      // below (which reads the pending draft for that product). Counting
+      // them again here would double-count the same location and falsely
+      // flag it as a duplicate.
+      if (products.some((p) => p.productCode === key)) continue
       const code = drafts[key]?.productCode.trim().toUpperCase()
       if (code) counts.set(code, (counts.get(code) ?? 0) + 1)
     }
