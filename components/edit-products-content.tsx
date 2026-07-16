@@ -7,6 +7,7 @@ import {
   Trash2Icon,
   CheckIcon,
   XIcon,
+  SearchIcon,
 } from "lucide-react"
 import { getProducts, replaceProducts, type Product } from "@/lib/product-store"
 import {
@@ -18,7 +19,9 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog"
+import { LoadingText } from "@/components/ui/loading-text"
 
 const inputCls =
   "w-full rounded-md border bg-background px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
@@ -26,7 +29,10 @@ const inputCls =
 const deliveryOptions = ["Daily", "WD", "Alt 1", "Alt 2", "WE", "WA"] as const
 
 function compareProductsByCode(a: Product, b: Product) {
-  return a.productCode.localeCompare(b.productCode)
+  return a.productCode.localeCompare(b.productCode, undefined, {
+    numeric: true,
+    sensitivity: "base",
+  })
 }
 
 interface EditRowProps {
@@ -113,6 +119,7 @@ export function EditProductsContent({ onSaveRef }: EditProductsContentProps) {
   const [activeAddDraftKey, setActiveAddDraftKey] = React.useState<string | null>(null)
   const [pendingDraftKeys, setPendingDraftKeys] = React.useState<string[]>([])
   const [saveError, setSaveError] = React.useState<string | null>(null)
+  const [searchQuery, setSearchQuery] = React.useState("")
 
   React.useEffect(() => {
     getProducts().then((items) => {
@@ -168,7 +175,10 @@ export function EditProductsContent({ onSaveRef }: EditProductsContentProps) {
           const leftCode = drafts[leftKey]?.productCode ?? ""
           const rightCode = drafts[rightKey]?.productCode ?? ""
 
-          return leftCode.localeCompare(rightCode)
+          return leftCode.localeCompare(rightCode, undefined, {
+            numeric: true,
+            sensitivity: "base",
+          })
         }),
     [drafts, pendingDraftKeys, products]
   )
@@ -185,6 +195,37 @@ export function EditProductsContent({ onSaveRef }: EditProductsContentProps) {
       return compareProductsByCode(leftDraft ?? leftItem, rightDraft ?? rightItem)
     })
   }, [drafts, pendingDraftKeys, products])
+
+  const filteredSortedProducts = React.useMemo(() => {
+    const keyword = searchQuery.trim().toLowerCase()
+    if (!keyword) return sortedProducts
+
+    return sortedProducts.filter((item) => {
+      const displayItem = pendingDraftKeys.includes(item.productCode)
+        ? drafts[item.productCode] ?? item
+        : item
+
+      return (
+        displayItem.productCode.toLowerCase().includes(keyword) ||
+        displayItem.productName.toLowerCase().includes(keyword)
+      )
+    })
+  }, [drafts, pendingDraftKeys, searchQuery, sortedProducts])
+
+  const filteredSortedPendingDraftKeys = React.useMemo(() => {
+    const keyword = searchQuery.trim().toLowerCase()
+    if (!keyword) return sortedPendingDraftKeys
+
+    return sortedPendingDraftKeys.filter((key) => {
+      const draft = drafts[key]
+      if (!draft) return false
+
+      return (
+        draft.productCode.toLowerCase().includes(keyword) ||
+        draft.productName.toLowerCase().includes(keyword)
+      )
+    })
+  }, [drafts, searchQuery, sortedPendingDraftKeys])
 
   const handleSaveAll = React.useCallback(async () => {
     setSaveError(null)
@@ -236,7 +277,10 @@ export function EditProductsContent({ onSaveRef }: EditProductsContentProps) {
     }
 
     const nextProducts = Array.from(nextByCode.values()).sort((a, b) =>
-      a.productCode.localeCompare(b.productCode)
+      a.productCode.localeCompare(b.productCode, undefined, {
+        numeric: true,
+        sensitivity: "base",
+      })
     )
 
     if (nextProducts.length === 0 && products.length > 0) {
@@ -336,28 +380,35 @@ export function EditProductsContent({ onSaveRef }: EditProductsContentProps) {
   }
 
   if (loading) {
-    return (
-      <div className="py-10 text-center text-sm text-muted-foreground">
-        Loading…
-      </div>
-    )
+    return <LoadingText />
   }
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm text-muted-foreground">
           {products.length} location{products.length !== 1 && "s"} in master list
         </p>
-        <Button
-          size="sm"
-          className="gap-1.5"
-          onClick={startAdd}
-          disabled={editingCode !== null || adding}
-        >
-          <PlusIcon className="size-3.5" />
-          Add Location
-        </Button>
+        <div className="flex items-center gap-2">
+          <div className="relative w-full max-w-[220px]">
+            <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search location..."
+              className="h-8 pl-8 text-xs"
+            />
+          </div>
+          <Button
+            size="sm"
+            className="gap-1.5"
+            onClick={startAdd}
+            disabled={editingCode !== null || adding}
+          >
+            <PlusIcon className="size-3.5" />
+            Add Location
+          </Button>
+        </div>
       </div>
 
       {saveError && (
@@ -392,7 +443,7 @@ export function EditProductsContent({ onSaveRef }: EditProductsContentProps) {
                 onCancel={cancelEdit}
               />
             )}
-            {sortedPendingDraftKeys.map((key) => {
+            {filteredSortedPendingDraftKeys.map((key) => {
                 const draft = drafts[key]
                 if (!draft) return null
                 const normalizedCode = draft.productCode.trim().toUpperCase()
@@ -443,7 +494,7 @@ export function EditProductsContent({ onSaveRef }: EditProductsContentProps) {
                   </TableRow>
                 )
               })}
-            {sortedProducts.map((item) => {
+            {filteredSortedProducts.map((item) => {
               if (editingCode === item.productCode && drafts[item.productCode]) {
                 const normalizedCode = drafts[item.productCode].productCode.trim().toUpperCase()
                 return (
@@ -521,6 +572,19 @@ export function EditProductsContent({ onSaveRef }: EditProductsContentProps) {
                 </TableCell>
               </TableRow>
             )}
+            {products.length > 0 &&
+              searchQuery.trim() !== "" &&
+              filteredSortedProducts.length === 0 &&
+              filteredSortedPendingDraftKeys.length === 0 && (
+                <TableRow>
+                  <TableCell
+                    colSpan={4}
+                    className="py-10 text-center text-muted-foreground"
+                  >
+                    No locations match &ldquo;{searchQuery}&rdquo;.
+                  </TableCell>
+                </TableRow>
+              )}
           </TableBody>
         </Table>
       </div>

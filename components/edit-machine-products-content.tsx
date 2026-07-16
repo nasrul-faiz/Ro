@@ -8,6 +8,7 @@ import {
 } from "lucide-react"
 import { getMachines, type Machine } from "@/lib/machine-store"
 import { getProducts, type Product } from "@/lib/product-store"
+import { LoadingText } from "@/components/ui/loading-text"
 import {
   getRouteLocations,
   upsertRouteLocations,
@@ -24,6 +25,7 @@ import {
 } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog"
+import { compareCodes } from "@/lib/utils"
 
 interface AssignmentDraft {
   routeId: string
@@ -126,9 +128,14 @@ export function EditMachineProductsContent({ onSaveRef }: EditMachineProductsCon
   const assignmentKey = (item: Pick<RouteLocation, "routeId" | "locationCode">) =>
     `${item.routeId}::${item.locationCode}`
 
+  const sortedRoutes = React.useMemo(
+    () => [...routes].sort((a, b) => compareCodes(a.value, b.value)),
+    [routes]
+  )
+
   const visibleAssignments = assignments
     .filter((item) => item.routeId === selectedRouteId)
-    .sort((a, b) => a.locationCode.localeCompare(b.locationCode))
+    .sort((a, b) => compareCodes(a.locationCode, b.locationCode))
 
   const productMap = React.useMemo(
     () => new Map(products.map((p) => [p.productCode, p])),
@@ -263,11 +270,7 @@ export function EditMachineProductsContent({ onSaveRef }: EditMachineProductsCon
   }
 
   if (loading) {
-    return (
-      <div className="py-10 text-center text-sm text-muted-foreground">
-        Loading…
-      </div>
-    )
+    return <LoadingText />
   }
 
   return (
@@ -290,7 +293,7 @@ export function EditMachineProductsContent({ onSaveRef }: EditMachineProductsCon
               }}
               className="h-8 rounded-lg border bg-background px-2.5 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-ring text-foreground"
             >
-              {routes.map((route) => (
+              {sortedRoutes.map((route) => (
                 <option key={route.value} value={route.value}>
                   {route.value} — {route.label}
                 </option>

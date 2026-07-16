@@ -6,7 +6,12 @@ export interface Product {
 }
 
 function sortProducts(products: Product[]): Product[] {
-  return [...products].sort((a, b) => a.productCode.localeCompare(b.productCode))
+  return [...products].sort((a, b) =>
+    a.productCode.localeCompare(b.productCode, undefined, {
+      numeric: true,
+      sensitivity: "base",
+    })
+  )
 }
 
 function toApiProduct(product: Product) {

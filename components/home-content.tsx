@@ -26,7 +26,8 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 import { useSidebar } from "@/components/ui/sidebar"
-import { cn } from "@/lib/utils"
+import { LoadingText } from "@/components/ui/loading-text"
+import { cn, compareCodes } from "@/lib/utils"
 
 const ALL_ROUTES_VALUE = "__all_routes__"
 
@@ -101,15 +102,17 @@ export function HomeContent({ initialRouteId }: HomeContentProps) {
     if (!selectedRoute?.value) return []
     return assignments
       .filter((item) => item.routeId === selectedRoute.value)
-      .sort((a, b) => a.locationCode.localeCompare(b.locationCode))
+      .sort((a, b) => compareCodes(a.locationCode, b.locationCode))
   }, [assignments, selectedRoute])
 
   const items = React.useMemo(
     () =>
-      machines.map((machine) => ({
-        label: `${machine.value} — ${machine.label}`,
-        value: machine.value,
-      })),
+      [...machines]
+        .sort((a, b) => compareCodes(a.value, b.value))
+        .map((machine) => ({
+          label: `${machine.value} — ${machine.label}`,
+          value: machine.value,
+        })),
     [machines]
   )
 
@@ -265,7 +268,11 @@ export function HomeContent({ initialRouteId }: HomeContentProps) {
         </div>
       ) : (
         <div className="rounded-xl border border-dashed bg-muted/20 p-10 text-center text-sm text-muted-foreground">
-          {loading ? "Loading routes..." : "Select a route from the dropdown to view its assigned locations."}
+          {loading ? (
+            <LoadingText text="Loading routes" className="py-0" />
+          ) : (
+            "Select a route from the dropdown to view its assigned locations."
+          )}
         </div>
       )}
     </div>

@@ -127,3 +127,14 @@
     @apply font-sans;
     }
 }
+
+@keyframes loading-dot {
+  0%,
+  80%,
+  100% {
+    opacity: 0.2;
+  }
+  40% {
+    opacity: 1;
+  }
+}

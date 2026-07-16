@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog"
+import { compareCodes } from "@/lib/utils"
 
 const inputCls =
   "w-full rounded-md border bg-background px-2 py-1 text-xs text-center focus:outline-none focus:ring-1 focus:ring-ring"
@@ -151,6 +152,21 @@ export function EditMachinesContent({ onSaveRef }: EditMachinesContentProps) {
         .map(([value]) => value)
     )
   }, [allMachineRows])
+
+  const sortedMachines = React.useMemo(
+    () => [...machines].sort((a, b) => compareCodes(a.value, b.value)),
+    [machines]
+  )
+
+  const sortedPendingDraftKeys = React.useMemo(
+    () =>
+      pendingDraftKeys
+        .filter((key) => !/^\d+$/.test(key) && drafts[key])
+        .sort((leftKey, rightKey) =>
+          compareCodes(drafts[leftKey]?.value ?? "", drafts[rightKey]?.value ?? "")
+        ),
+    [drafts, pendingDraftKeys]
+  )
 
   const handleSaveAll = React.useCallback(async () => {
     setSaveError(null)
@@ -340,8 +356,7 @@ export function EditMachinesContent({ onSaveRef }: EditMachinesContentProps) {
                   onCancel={cancelEdit}
                 />
               )}
-              {pendingDraftKeys
-                .filter((key) => !/^\d+$/.test(key) && drafts[key])
+              {sortedPendingDraftKeys
                 .map((key) => {
                   const normalizedValue = drafts[key]?.value?.trim().toUpperCase() ?? ""
                   const hasDuplicate = normalizedValue ? duplicateMachineValues.has(normalizedValue) : false
@@ -394,7 +409,7 @@ export function EditMachinesContent({ onSaveRef }: EditMachinesContentProps) {
                     </TableCell>
                   </TableRow>
                 )})}
-              {machines.map((machine) => {
+              {sortedMachines.map((machine) => {
                 const draftKey = `${machine.id}`
                 const isEditing = editingId === machine.id
                 if (isEditing && drafts[draftKey]) {
