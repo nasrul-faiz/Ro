@@ -1,12 +1,13 @@
 "use client"
 
 import * as React from "react"
-import { ChevronsUpDownIcon, ClipboardListIcon, MapPinIcon } from "lucide-react"
+import { ChevronsUpDownIcon, FilterIcon, MapPinIcon, ArrowUpDownIcon, SettingsIcon, LocateIcon } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { getMachines, type Machine } from "@/lib/machine-store"
 import { getProducts, type Product } from "@/lib/product-store"
 import { getRouteLocations, type RouteLocation } from "@/lib/route-location-store"
 import { getAllDOs, DELIVERY_ORDERS_UPDATED_EVENT, type DeliveryOrder } from "@/lib/do-store"
+import { getDrivingDistanceKm } from "@/lib/geo"
 import {
   Field,
   FieldDescription,
@@ -16,6 +17,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableFooter,
   TableHead,
   TableHeader,
   TableRow,
@@ -27,12 +29,11 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { useSidebar } from "@/components/ui/sidebar"
 import { LoadingText } from "@/components/ui/loading-text"
 import { cn, compareCodes, isDeliveryActive } from "@/lib/utils"
@@ -67,9 +68,33 @@ export function HomeContent({ initialRouteId }: HomeContentProps) {
   const [routePickerOpen, setRoutePickerOpen] = React.useState(false)
   const [searchQuery, setSearchQuery] = React.useState("")
   const [allOrders, setAllOrders] = React.useState<DeliveryOrder[]>([])
-  const [isViewDOOpen, setIsViewDOOpen] = React.useState(false)
+  const [customStart, setCustomStart] = React.useState<{ lat: number; lng: number } | null>(null)
+  const [geoLoading, setGeoLoading] = React.useState(false)
+  const [geoError, setGeoError] = React.useState("")
+  const [liveKmCache, setLiveKmCache] = React.useState<Record<string, number | null>>({})
+  const liveKmFetchingRef = React.useRef<Set<string>>(new Set())
   const router = useRouter()
   const { isMobile, setOpen, setOpenMobile } = useSidebar()
+
+  function handleUseCurrentLocation() {
+    if (!navigator.geolocation) {
+      setGeoError("Geolocation not supported.")
+      return
+    }
+    setGeoLoading(true)
+    setGeoError("")
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setCustomStart({ lat: pos.coords.latitude, lng: pos.coords.longitude })
+        setLiveKmCache({})
+        setGeoLoading(false)
+      },
+      () => {
+        setGeoError("Could not get location.")
+        setGeoLoading(false)
+      }
+    )
+  }
 
   React.useEffect(() => {
     let cancelled = false
@@ -173,29 +198,27 @@ export function HomeContent({ initialRouteId }: HomeContentProps) {
     [allOrders, selectedRoute, todayKey]
   )
 
-  // Summarize DO items for the dialog
-  const todaysItemSummary = React.useMemo(() => {
-    const map = new Map<
-      string,
-      { slot: string; productCode: string; productName: string; qty: number }
-    >()
-    todaysOrders.forEach((order) => {
-      order.items.forEach((item) => {
-        const key = `${item.slot}-${item.productCode}`
-        const existing = map.get(key)
-        if (existing) {
-          existing.qty += item.qty
-        } else {
-          map.set(key, { ...item })
-        }
+  const hasDeliveryToday = todaysOrders.length > 0
+
+  // Live driving distance from the user's current location (once captured)
+  // to each visible location, used to override the stored KM figures.
+  React.useEffect(() => {
+    if (!customStart) return
+
+    visibleAssignments.forEach((assignment) => {
+      const code = assignment.locationCode
+      if (code in liveKmCache) return
+      if (liveKmFetchingRef.current.has(code)) return
+      const loc = productMap.get(code)
+      if (!loc?.latitude || !loc?.longitude) return
+
+      liveKmFetchingRef.current.add(code)
+      getDrivingDistanceKm(customStart.lat, customStart.lng, loc.latitude, loc.longitude).then((km) => {
+        liveKmFetchingRef.current.delete(code)
+        setLiveKmCache((prev) => ({ ...prev, [code]: km }))
       })
     })
-    return Array.from(map.values()).sort((a, b) =>
-      a.slot.localeCompare(b.slot, undefined, { numeric: true, sensitivity: "base" })
-    )
-  }, [todaysOrders])
-
-  const hasDeliveryToday = todaysOrders.length > 0
+  }, [customStart, visibleAssignments, productMap, liveKmCache])
 
   function handleSelectRoute(value: string | null) {
     const nextValue = value === ALL_ROUTES_VALUE ? null : value
@@ -221,7 +244,7 @@ export function HomeContent({ initialRouteId }: HomeContentProps) {
   const hasInvalidRoute = Boolean(initialRouteId) && !loading && !selectedRoute
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-3">
         <Field className="w-full max-w-xl">
           <FieldLabel>Route</FieldLabel>
@@ -286,7 +309,6 @@ export function HomeContent({ initialRouteId }: HomeContentProps) {
           </Popover>
           <FieldDescription>Each route now has its own URL, so you can open or share it directly.</FieldDescription>
         </Field>
-
       </div>
 
       {selectedRoute ? (
@@ -296,31 +318,46 @@ export function HomeContent({ initialRouteId }: HomeContentProps) {
         )}>
           {/* Header bar with delivery indicator */}
           <div className={cn(
-            "px-4 py-2 border-b flex items-center justify-between",
+            "px-5 py-3 border-b flex items-center justify-end gap-4",
             hasDeliveryToday ? "bg-emerald-50/80 dark:bg-emerald-950/30" : "bg-muted/40"
           )}>
-            <span className={cn(
-              "text-[11px] font-semibold tracking-widest uppercase",
-              hasDeliveryToday ? "text-emerald-700 dark:text-emerald-300" : "text-muted-foreground"
-            )}>
-              {selectedRoute.value}
-            </span>
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] text-muted-foreground">
-                {visibleAssignments.length} location{visibleAssignments.length !== 1 && "s"}
-              </span>
-              <Button
-                type="button"
-                size="sm"
-                disabled={!hasDeliveryToday}
-                onClick={() => setIsViewDOOpen(true)}
-                className={`h-7 text-[11px] gap-1.5 px-2.5 ${hasDeliveryToday ? "bg-emerald-600 hover:bg-emerald-700 text-white" : ""}`}
-                variant={hasDeliveryToday ? "default" : "outline"}
-              >
-                <ClipboardListIcon className="size-3.5" />
-                View DO
-              </Button>
-            </div>
+            <button
+              type="button"
+              onClick={handleUseCurrentLocation}
+              disabled={geoLoading}
+              title={geoError || "Use your current location as the starting point for distance calculations"}
+              className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors disabled:opacity-60"
+            >
+              <LocateIcon className="size-3.5" />
+              {geoLoading
+                ? "Getting location…"
+                : customStart
+                  ? `${customStart.lat.toFixed(5)}, ${customStart.lng.toFixed(5)}`
+                  : "Default Starting Point"}
+            </button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  size="sm"
+                  className="h-7 text-[11px] gap-1.5 px-2.5"
+                  variant="outline"
+                >
+                  <SettingsIcon className="size-3.5" />
+                  Settings
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem>
+                  <FilterIcon />
+                  Filter
+                </DropdownMenuItem>
+                <DropdownMenuItem>
+                  <ArrowUpDownIcon />
+                  Sorting
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
 
           <div className="overflow-x-auto">
@@ -330,7 +367,7 @@ export function HomeContent({ initialRouteId }: HomeContentProps) {
                   {["No", "Code", "Name", "Delivery", "KM"].map((h) => (
                     <TableHead
                       key={h}
-                      className="text-[11px] font-semibold tracking-wide py-2 px-4 text-center"
+                      className="text-[11px] font-semibold tracking-wide py-3 px-5 text-center"
                     >
                       {h}
                     </TableHead>
@@ -353,26 +390,36 @@ export function HomeContent({ initialRouteId }: HomeContentProps) {
                       <TableRow
                         key={`${assignment.routeId}-${assignment.locationCode}`}
                         className={cn(
-                          "h-10",
+                          "h-12",
                           isActiveToday
                             ? hasDeliveryToday && "hover:bg-emerald-50/40 dark:hover:bg-emerald-950/20"
                             : "bg-muted/30 text-muted-foreground/60 hover:bg-muted/45"
                         )}
                       >
-                        <TableCell className="py-1.5 px-4 text-center font-medium tabular-nums">
+                        <TableCell className="py-2.5 px-5 text-center font-medium tabular-nums">
                           {index + 1}
                         </TableCell>
-                        <TableCell className="py-1.5 px-4 text-center font-medium">
+                        <TableCell className="py-2.5 px-5 text-center font-medium">
                           {assignment.locationCode}
                         </TableCell>
-                        <TableCell className="py-1.5 px-4 text-center font-medium">
+                        <TableCell className="py-2.5 px-5 text-center font-medium">
                           {product?.productName ?? assignment.locationName ?? "Unknown"}
                         </TableCell>
-                        <TableCell className="py-1.5 px-4 text-center text-muted-foreground">
+                        <TableCell className="py-2.5 px-5 text-center text-muted-foreground">
                           {deliveryValue || "-"}
                         </TableCell>
-                        <TableCell className="py-1.5 px-4 text-center font-medium tabular-nums">
-                          {assignment.km != null ? (
+                        <TableCell className="py-2.5 px-5 text-center font-medium tabular-nums">
+                          {customStart ? (
+                            assignment.locationCode in liveKmCache ? (
+                              liveKmCache[assignment.locationCode] != null ? (
+                                <span>{liveKmCache[assignment.locationCode]!.toFixed(1)} km</span>
+                              ) : (
+                                <span className="text-muted-foreground/40">—</span>
+                              )
+                            ) : (
+                              <span className="text-muted-foreground/40 text-[10px]">…</span>
+                            )
+                          ) : assignment.km != null ? (
                             <span>{assignment.km} km</span>
                           ) : (
                             <span className="text-muted-foreground/40">—</span>
@@ -383,6 +430,23 @@ export function HomeContent({ initialRouteId }: HomeContentProps) {
                   })
                 )}
               </TableBody>
+              <TableFooter>
+                <TableRow className="hover:bg-transparent">
+                  <TableCell colSpan={5} className="py-3 px-5">
+                    <div className="flex items-center justify-between">
+                      <span className={cn(
+                        "text-[11px] font-semibold tracking-widest uppercase",
+                        hasDeliveryToday ? "text-emerald-700 dark:text-emerald-300" : "text-muted-foreground"
+                      )}>
+                        {selectedRoute.value}
+                      </span>
+                      <span className="text-[11px] text-muted-foreground">
+                        {visibleAssignments.length} location{visibleAssignments.length !== 1 && "s"}
+                      </span>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              </TableFooter>
             </Table>
           </div>
         </div>
@@ -402,50 +466,6 @@ export function HomeContent({ initialRouteId }: HomeContentProps) {
           )}
         </div>
       )}
-
-      {/* DO summary dialog */}
-      <Dialog open={isViewDOOpen} onOpenChange={setIsViewDOOpen}>
-        <DialogContent className="sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>DO List Today — {selectedRoute?.value}</DialogTitle>
-            <DialogDescription>
-              {todaysOrders.length} generated DO(s) with {todaysItemSummary.length} item line(s).
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="max-h-[60vh] overflow-auto rounded-lg border">
-            <Table className="text-xs min-w-[480px]">
-              <TableHeader>
-                <TableRow className="hover:bg-transparent">
-                  <TableHead className="text-center text-[11px] font-semibold tracking-wide py-2">Slot</TableHead>
-                  <TableHead className="text-left text-[11px] font-semibold tracking-wide py-2">Product</TableHead>
-                  <TableHead className="text-left text-[11px] font-semibold tracking-wide py-2">Code</TableHead>
-                  <TableHead className="text-right text-[11px] font-semibold tracking-wide py-2">Qty</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {todaysItemSummary.map((item) => (
-                  <TableRow key={`${item.slot}-${item.productCode}`} className="h-9">
-                    <TableCell className="text-center py-1.5">
-                      <span className="font-mono font-bold tracking-wider">{item.slot}</span>
-                    </TableCell>
-                    <TableCell className="py-1.5 font-medium">{item.productName}</TableCell>
-                    <TableCell className="py-1.5 text-muted-foreground">{item.productCode}</TableCell>
-                    <TableCell className="py-1.5 text-right font-semibold tabular-nums">{item.qty}</TableCell>
-                  </TableRow>
-                ))}
-                {todaysItemSummary.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={4} className="py-6 text-center text-muted-foreground">
-                      No orders for this route today.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }
