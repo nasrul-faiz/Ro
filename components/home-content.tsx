@@ -36,7 +36,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { useSidebar } from "@/components/ui/sidebar"
 import { LoadingText } from "@/components/ui/loading-text"
-import { cn, compareCodes, isDeliveryActive } from "@/lib/utils"
+import { cn, compareCodes, isDeliveryActive, getDeliveryDescription } from "@/lib/utils"
 
 const ALL_ROUTES_VALUE = "__all_routes__"
 
@@ -406,7 +406,23 @@ export function HomeContent({ initialRouteId }: HomeContentProps) {
                           {product?.productName ?? assignment.locationName ?? "Unknown"}
                         </TableCell>
                         <TableCell className="py-2.5 px-5 text-center text-muted-foreground">
-                          {deliveryValue || "-"}
+                          {deliveryValue ? (
+                            <Popover>
+                              <PopoverTrigger asChild>
+                                <button
+                                  type="button"
+                                  className="rounded px-1.5 py-0.5 underline decoration-dotted underline-offset-2 hover:bg-muted/60 hover:text-foreground"
+                                >
+                                  {deliveryValue}
+                                </button>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-auto px-3 py-2 text-xs">
+                                {getDeliveryDescription(deliveryValue)}
+                              </PopoverContent>
+                            </Popover>
+                          ) : (
+                            "-"
+                          )}
                         </TableCell>
                         <TableCell className="py-2.5 px-5 text-center font-medium tabular-nums">
                           {customStart ? (

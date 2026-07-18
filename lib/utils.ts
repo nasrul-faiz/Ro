@@ -45,3 +45,28 @@ export function isDeliveryActive(delivery?: string, date: Date = new Date()): bo
       return true
   }
 }
+
+/**
+ * Returns a human-readable description of a delivery schedule code,
+ * shown to users e.g. in a tooltip/popover when they click a delivery cell.
+ */
+export function getDeliveryDescription(delivery?: string): string {
+  if (!delivery) return "No delivery schedule set"
+
+  switch (delivery) {
+    case "Daily":
+      return "Delivery Every Day"
+    case "Alt 1":
+      return "Delivery on Odd Dates Only (1, 3, 5…)"
+    case "Alt 2":
+      return "Delivery on Even Dates Only (2, 4, 6…)"
+    case "WE":
+      return "Delivery From Mon - Fri"
+    case "WD":
+      return "Delivery From Sun - Thu"
+    case "WA":
+      return "Delivery on Sun, Tue, and Thu only"
+    default:
+      return `Delivery: ${delivery}`
+  }
+}
