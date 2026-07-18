@@ -11,6 +11,7 @@ import {
   MapPinIcon,
   LocateIcon,
   ExternalLinkIcon,
+  MoreVerticalIcon,
 } from "lucide-react"
 import {
   getProducts,
@@ -38,6 +39,12 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import {
   Dialog,
   DialogContent,
@@ -227,9 +234,10 @@ function EditRow({ draft, duplicateCode, onDraftChange, onConfirm, onCancel }: E
 // ─── Main component ─────────────────────────────────────────────────────────
 interface EditProductsContentProps {
   onSaveRef?: React.MutableRefObject<(() => Promise<void>) | null>
+  onDirtyChange?: (dirty: boolean) => void
 }
 
-export function EditProductsContent({ onSaveRef }: EditProductsContentProps) {
+export function EditProductsContent({ onSaveRef, onDirtyChange }: EditProductsContentProps) {
   const [products, setProducts] = React.useState<Product[]>([])          // regular locations
   const [startingPoint, setStartingPoint] = React.useState<Product | null>(null)
   const [drafts, setDrafts] = React.useState<Record<string, Product>>({})
@@ -423,6 +431,12 @@ export function EditProductsContent({ onSaveRef }: EditProductsContentProps) {
   React.useEffect(() => {
     if (onSaveRef) onSaveRef.current = handleSaveAll
   }, [handleSaveAll, onSaveRef])
+
+  const hasChanges = pendingDraftKeys.length > 0 || spCoordPending || Object.keys(coordDrafts).length > 0
+
+  React.useEffect(() => {
+    onDirtyChange?.(hasChanges)
+  }, [hasChanges, onDirtyChange])
 
   // ── Actions ───────────────────────────────────────────────────────────────
   async function handleDelete(productCode: string) {
@@ -649,15 +663,28 @@ export function EditProductsContent({ onSaveRef }: EditProductsContentProps) {
                       <TableCell className="py-1.5 text-center">{draft.image || "-"}</TableCell>
                       <TableCell className="py-1.5 text-center text-muted-foreground/40 italic text-[11px]">Save first</TableCell>
                       <TableCell className="py-1.5">
-                        <div className="flex justify-center gap-1">
-                          <button onClick={() => { setAdding(true); setEditingCode(null); setActiveAddDraftKey(key) }}
-                            className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground">
-                            <PencilIcon className="size-3.5" />
-                          </button>
-                          <button onClick={() => setContextDeleteTarget({ kind: "pending", code: key })}
-                            className="rounded p-1 text-muted-foreground hover:bg-red-100 hover:text-red-500 dark:hover:bg-red-900/40">
-                            <Trash2Icon className="size-3.5" />
-                          </button>
+                        <div className="flex justify-center">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <button
+                                className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground">
+                                <MoreVerticalIcon className="size-3.5" />
+                              </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => { setAdding(true); setEditingCode(null); setActiveAddDraftKey(key) }}>
+                                <PencilIcon />
+                                Edit
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                variant="destructive"
+                                onClick={() => setContextDeleteTarget({ kind: "pending", code: key })}
+                              >
+                                <Trash2Icon />
+                                Delete
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -723,15 +750,28 @@ export function EditProductsContent({ onSaveRef }: EditProductsContentProps) {
                         <CoordButton code={item.productCode} lat={lat} lng={lng} />
                       </TableCell>
                       <TableCell className="py-1.5">
-                        <div className="flex justify-center gap-1">
-                          <button onClick={() => startEdit(item.productCode)}
-                            className="rounded p-1 hover:bg-muted text-muted-foreground hover:text-foreground">
-                            <PencilIcon className="size-3.5" />
-                          </button>
-                          <button onClick={() => setContextDeleteTarget({ kind: "saved", code: item.productCode })}
-                            className="rounded p-1 hover:bg-red-100 dark:hover:bg-red-900/40 text-muted-foreground hover:text-red-500">
-                            <Trash2Icon className="size-3.5" />
-                          </button>
+                        <div className="flex justify-center">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <button
+                                className="rounded p-1 hover:bg-muted text-muted-foreground hover:text-foreground">
+                                <MoreVerticalIcon className="size-3.5" />
+                              </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => startEdit(item.productCode)}>
+                                <PencilIcon />
+                                Edit
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                variant="destructive"
+                                onClick={() => setContextDeleteTarget({ kind: "saved", code: item.productCode })}
+                              >
+                                <Trash2Icon />
+                                Delete
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </div>
                       </TableCell>
                     </TableRow>

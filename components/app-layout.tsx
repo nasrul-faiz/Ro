@@ -5,7 +5,7 @@ import {
   CalendarIcon,
   UsersIcon,
   SettingsIcon,
-  InboxIcon,
+  MapIcon,
   ChevronsUpDownIcon,
   CheckIcon,
   RefreshCwIcon,
@@ -64,7 +64,7 @@ const workspaces = [
 
 const defaultNavItems = [
   { title: "Home", icon: HomeIcon, url: "/home" },
-  { title: "Inbox", icon: InboxIcon, url: "/inbox" },
+  { title: "Map", icon: MapIcon, url: "/map" },
   { title: "Calendar", icon: CalendarIcon, url: "/calendar" },
   { title: "Team", icon: UsersIcon, url: "/team" },
 ]

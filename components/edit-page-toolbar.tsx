@@ -57,15 +57,17 @@ export function EditPageToolbar({ title, onSave, isDirty = false }: EditPageTool
             Save failed
           </div>
         )}
-        <Button
-          size="sm"
-          onClick={handleSave}
-          disabled={isSaving}
-          className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
-        >
-          <SaveIcon className="size-4" />
-          {isSaving ? "Saving..." : "Save"}
-        </Button>
+        {(isDirty || isSaving) && (
+          <Button
+            size="sm"
+            onClick={handleSave}
+            disabled={isSaving}
+            className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
+          >
+            <SaveIcon className="size-4" />
+            {isSaving ? "Saving..." : "Save"}
+          </Button>
+        )}
       </div>
     </div>
   )

@@ -81,9 +81,10 @@ function AssignmentEditRow({ availableProducts, draft, onDraftChange, onConfirm,
 // ─── Main component ─────────────────────────────────────────────────────────
 interface EditMachineProductsContentProps {
   onSaveRef?: React.MutableRefObject<(() => Promise<void>) | null>
+  onDirtyChange?: (dirty: boolean) => void
 }
 
-export function EditMachineProductsContent({ onSaveRef }: EditMachineProductsContentProps) {
+export function EditMachineProductsContent({ onSaveRef, onDirtyChange }: EditMachineProductsContentProps) {
   const [routes, setRoutes] = React.useState<Machine[]>([])
   const [products, setProducts] = React.useState<Product[]>([])
   const [assignments, setAssignments] = React.useState<RouteLocation[]>([])
@@ -257,6 +258,10 @@ export function EditMachineProductsContent({ onSaveRef }: EditMachineProductsCon
   React.useEffect(() => {
     if (onSaveRef) onSaveRef.current = handleSaveAll
   }, [handleSaveAll, onSaveRef])
+
+  React.useEffect(() => {
+    onDirtyChange?.(pendingDraftKeys.length > 0)
+  }, [pendingDraftKeys, onDirtyChange])
 
   async function handleDelete(assignment: RouteLocation) {
     const ok = await deleteRouteLocation(assignment.routeId, assignment.locationCode)

@@ -246,7 +246,7 @@ export function HomeContent({ initialRouteId }: HomeContentProps) {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-3">
-        <Field className="w-full max-w-xl">
+        <Field className="w-full max-w-sm">
           <FieldLabel>Route</FieldLabel>
           <Popover open={routePickerOpen} onOpenChange={setRoutePickerOpen}>
             <PopoverTrigger asChild>
@@ -340,7 +340,7 @@ export function HomeContent({ initialRouteId }: HomeContentProps) {
                 <Button
                   type="button"
                   size="sm"
-                  className="h-7 text-[11px] gap-1.5 px-2.5"
+                  className="h-7 text-[11px] gap-1.5 px-2.5 border-slate-400 bg-slate-300 text-slate-800 hover:bg-slate-400 dark:border-slate-500 dark:bg-slate-600 dark:text-slate-100 dark:hover:bg-slate-500"
                   variant="outline"
                 >
                   <SettingsIcon className="size-3.5" />
@@ -393,7 +393,7 @@ export function HomeContent({ initialRouteId }: HomeContentProps) {
                           "h-12",
                           isActiveToday
                             ? hasDeliveryToday && "hover:bg-emerald-50/40 dark:hover:bg-emerald-950/20"
-                            : "bg-muted/30 text-muted-foreground/60 hover:bg-muted/45"
+                            : "text-muted-foreground/60 hover:bg-muted/30"
                         )}
                       >
                         <TableCell className="py-2.5 px-5 text-center font-medium tabular-nums">

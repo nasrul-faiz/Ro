@@ -98,9 +98,10 @@ function MachineEditRow({ machine, draft, duplicateValue, onDraftChange, onConfi
 
 interface EditMachinesContentProps {
   onSaveRef?: React.MutableRefObject<(() => Promise<void>) | null>
+  onDirtyChange?: (dirty: boolean) => void
 }
 
-export function EditMachinesContent({ onSaveRef }: EditMachinesContentProps) {
+export function EditMachinesContent({ onSaveRef, onDirtyChange }: EditMachinesContentProps) {
   const [machines, setMachines] = React.useState<Machine[]>([])
   const [drafts, setDrafts] = React.useState<Record<string, Machine>>({})
   const [loading, setLoading] = React.useState(true)
@@ -229,6 +230,10 @@ export function EditMachinesContent({ onSaveRef }: EditMachinesContentProps) {
       onSaveRef.current = handleSaveAll
     }
   }, [handleSaveAll, onSaveRef])
+
+  React.useEffect(() => {
+    onDirtyChange?.(pendingDraftKeys.length > 0)
+  }, [pendingDraftKeys, onDirtyChange])
 
   function startAdd() {
     const draftKey = `new-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`

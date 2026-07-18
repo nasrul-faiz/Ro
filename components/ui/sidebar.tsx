@@ -218,7 +218,7 @@ function Sidebar({
         aria-label="Close sidebar"
         onClick={() => setOpen(false)}
         className={cn(
-          "fixed inset-0 z-30 bg-black/35 transition-opacity duration-200",
+          "fixed inset-0 z-30 bg-black/35 backdrop-blur-sm transition-[opacity,backdrop-filter] duration-200",
           open ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"
         )}
       />

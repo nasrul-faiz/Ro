@@ -7,6 +7,7 @@ import { EditPageToolbar } from "@/components/edit-page-toolbar"
 
 export default function EditMachinesPage() {
   const saveRef = React.useRef<(() => Promise<void>) | null>(null)
+  const [isDirty, setIsDirty] = React.useState(false)
 
   return (
     <AppLayout title="Manage Route">
@@ -14,9 +15,10 @@ export default function EditMachinesPage() {
         <EditPageToolbar
           title="Route"
           onSave={() => saveRef.current?.() ?? Promise.resolve()}
+          isDirty={isDirty}
         />
         <div className="flex-1 overflow-auto p-4">
-          <EditMachinesContent onSaveRef={saveRef} />
+          <EditMachinesContent onSaveRef={saveRef} onDirtyChange={setIsDirty} />
         </div>
       </div>
     </AppLayout>
