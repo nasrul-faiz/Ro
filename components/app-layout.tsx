@@ -40,6 +40,7 @@ import {
 import { ThemeToggle } from "@/components/theme-toggle"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
+import { cn } from "@/lib/utils"
 
 const workspaces = [
   {
@@ -80,12 +81,16 @@ const settingsItems = [
 interface AppLayoutProps {
   title: string
   defaultSidebarOpen?: boolean
+  headerActions?: React.ReactNode
+  fullBleed?: boolean
   children: React.ReactNode
 }
 
 export function AppLayout({
   title,
   defaultSidebarOpen,
+  headerActions,
+  fullBleed,
   children,
 }: AppLayoutProps) {
   const pathname = usePathname()
@@ -208,8 +213,13 @@ export function AppLayout({
         <header className="sticky top-0 z-20 flex h-14 items-center gap-2 border-b border-border/50 bg-background/35 px-4 backdrop-blur-2xl backdrop-saturate-150 supports-backdrop-filter:bg-background/25">
           <SidebarTrigger />
           <h1 className="font-semibold">{title}</h1>
+          {headerActions && (
+            <div className="ml-auto flex items-center gap-2">{headerActions}</div>
+          )}
         </header>
-        <main className="flex flex-1 flex-col gap-4 p-6">{children}</main>
+        <main className={cn("flex flex-1 flex-col", fullBleed ? "min-h-0 overflow-hidden" : "gap-4 p-6")}>
+          {children}
+        </main>
       </SidebarInset>
     </SidebarProvider>
   )

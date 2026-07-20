@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { PlusIcon, CheckIcon, XIcon } from "lucide-react"
+import { PlusIcon, CheckIcon, XIcon, MoreVerticalIcon, PencilIcon, Trash2Icon } from "lucide-react"
 import { getMachines, type Machine } from "@/lib/machine-store"
 import { getProducts, type Product, STARTING_POINT_CODE } from "@/lib/product-store"
 import { getDrivingDistanceKm } from "@/lib/geo"
@@ -22,6 +22,12 @@ import {
 } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { compareCodes } from "@/lib/utils"
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -93,7 +99,9 @@ export function EditMachineProductsContent({ onSaveRef, onDirtyChange }: EditMac
   const [selectedRouteId, setSelectedRouteId] = React.useState("")
   const [adding, setAdding] = React.useState(false)
   const [activeAddDraftKey, setActiveAddDraftKey] = React.useState<string | null>(null)
+  const [editingKey, setEditingKey] = React.useState<string | null>(null)
   const [pendingDraftKeys, setPendingDraftKeys] = React.useState<string[]>([])
+  const [deleteTarget, setDeleteTarget] = React.useState<{ kind: "pending" | "saved"; key: string } | null>(null)
   const [newAssignment, setNewAssignment] = React.useState<AssignmentDraft>({
     routeId: "",
     locationCode: "",
@@ -282,6 +290,10 @@ export function EditMachineProductsContent({ onSaveRef, onDirtyChange }: EditMac
       setPendingDraftKeys((prev) => (prev.includes(key) ? prev : [...prev, key]))
       setAdding(false)
       setActiveAddDraftKey(null)
+    } else if (editingKey && drafts[editingKey]) {
+      const key = editingKey
+      setPendingDraftKeys((prev) => (prev.includes(key) ? prev : [...prev, key]))
+      setEditingKey(null)
     }
   }
 
@@ -289,6 +301,22 @@ export function EditMachineProductsContent({ onSaveRef, onDirtyChange }: EditMac
     setDrafts((prev) => { const n = { ...prev }; delete n[key]; return n })
     setPendingDraftKeys((prev) => prev.filter((k) => k !== key))
     if (activeAddDraftKey === key) setActiveAddDraftKey(null)
+    if (editingKey === key) setEditingKey(null)
+  }
+
+  function startEditAssignment(assignment: RouteLocation) {
+    const key = assignmentKey(assignment)
+    setDrafts((prev) => ({
+      ...prev,
+      [key]: {
+        routeId: assignment.routeId,
+        locationCode: assignment.locationCode,
+        originalLocationCode: assignment.locationCode,
+      },
+    }))
+    setEditingKey(key)
+    setAdding(false)
+    setActiveAddDraftKey(null)
   }
 
   if (loading) return <LoadingText />
@@ -306,19 +334,20 @@ export function EditMachineProductsContent({ onSaveRef, onDirtyChange }: EditMac
               onChange={(e) => {
                 setSelectedRouteId(e.target.value)
                 setAdding(false)
+                setEditingKey(null)
                 setNewAssignment((prev) => ({ ...prev, routeId: e.target.value }))
               }}
               className="h-8 rounded-lg border bg-background px-2.5 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-ring text-foreground"
             >
               {sortedRoutes.map((route) => (
                 <option key={route.value} value={route.value}>
-                  {route.value} — {route.label}
+                  {route.label}
                 </option>
               ))}
             </select>
           </div>
           <Button size="sm" className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
-            disabled={!selectedRouteId || selectableProducts.length === 0 || adding}
+            disabled={!selectedRouteId || selectableProducts.length === 0 || adding || editingKey !== null}
             onClick={startAdd}>
             <PlusIcon className="size-3.5" />
             Add Route Location
@@ -385,12 +414,23 @@ export function EditMachineProductsContent({ onSaveRef, onDirtyChange }: EditMac
                       </TableCell>
                       <TableCell className="py-1.5">
                         <div className="flex justify-center">
-                          <ConfirmDeleteDialog
-                            trigger={<Button variant="destructive" size="sm">Remove</Button>}
-                            title="Remove pending location?"
-                            description="This pending draft will be discarded."
-                            onConfirm={() => removeDraft(key)}
-                          />
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <button
+                                className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground">
+                                <MoreVerticalIcon className="size-3.5" />
+                              </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem
+                                variant="destructive"
+                                onClick={() => setDeleteTarget({ kind: "pending", key })}
+                              >
+                                <Trash2Icon />
+                                Remove
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -400,13 +440,31 @@ export function EditMachineProductsContent({ onSaveRef, onDirtyChange }: EditMac
               {/* Saved assignments */}
               {visibleAssignments.map((assignment) => {
                 const key = assignmentKey(assignment)
-                const product = productMap.get(assignment.locationCode)
-                const km = getKm(assignment.locationCode)
+
+                if (editingKey === key && drafts[key]) {
+                  return (
+                    <AssignmentEditRow
+                      key={key}
+                      availableProducts={getAvailableProducts(drafts[key])}
+                      draft={drafts[key]}
+                      onDraftChange={(d) => setDrafts((prev) => ({ ...prev, [key]: d }))}
+                      onConfirm={confirmDraft}
+                      onCancel={() => removeDraft(key)}
+                    />
+                  )
+                }
+
+                const pendingDraft = pendingDraftKeys.includes(key) ? drafts[key] : undefined
+                const locationCode = pendingDraft?.locationCode ?? assignment.locationCode
+                const product = productMap.get(locationCode)
+                const km = getKm(locationCode)
+                const isPending = !!pendingDraft
 
                 return (
-                  <TableRow key={key} className="h-10">
+                  <TableRow key={key} className={`h-10 ${isPending ? "bg-amber-50/60 dark:bg-amber-950/20" : ""}`}>
                     <TableCell className="text-center py-1.5 font-medium">
-                      {assignment.locationCode}
+                      {locationCode}
+                      {isPending && <span className="ml-2 text-[10px] text-amber-600 font-medium uppercase">Pending</span>}
                     </TableCell>
                     <TableCell className="py-1.5 text-center font-medium">
                       {product?.productName ?? assignment.locationName ?? "Unknown"}
@@ -425,12 +483,30 @@ export function EditMachineProductsContent({ onSaveRef, onDirtyChange }: EditMac
                     </TableCell>
                     <TableCell className="py-1.5">
                       <div className="flex justify-center">
-                        <ConfirmDeleteDialog
-                          trigger={<Button variant="destructive" size="sm">Remove</Button>}
-                          title="Delete route location?"
-                          description="This will remove the location from this route."
-                          onConfirm={() => handleDelete(assignment)}
-                        />
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button
+                              className="rounded p-1 hover:bg-muted text-muted-foreground hover:text-foreground">
+                              <MoreVerticalIcon className="size-3.5" />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              disabled={adding || editingKey !== null}
+                              onClick={() => startEditAssignment(assignment)}
+                            >
+                              <PencilIcon />
+                              Edit
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              variant="destructive"
+                              onClick={() => setDeleteTarget({ kind: "saved", key })}
+                            >
+                              <Trash2Icon />
+                              Remove
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -449,6 +525,27 @@ export function EditMachineProductsContent({ onSaveRef, onDirtyChange }: EditMac
           </Table>
         </div>
       </div>
+
+      <ConfirmDeleteDialog
+        open={!!deleteTarget}
+        onOpenChange={(o) => { if (!o) setDeleteTarget(null) }}
+        title={deleteTarget?.kind === "pending" ? "Remove pending location?" : "Delete route location?"}
+        description={
+          deleteTarget?.kind === "pending"
+            ? "This pending draft will be discarded."
+            : "This will remove the location from this route."
+        }
+        onConfirm={() => {
+          if (!deleteTarget) return
+          if (deleteTarget.kind === "pending") {
+            removeDraft(deleteTarget.key)
+          } else {
+            const assignment = assignments.find((a) => assignmentKey(a) === deleteTarget.key)
+            if (assignment) handleDelete(assignment)
+          }
+          setDeleteTarget(null)
+        }}
+      />
     </div>
   )
 }

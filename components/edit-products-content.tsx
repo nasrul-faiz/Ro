@@ -12,6 +12,7 @@ import {
   LocateIcon,
   ExternalLinkIcon,
   MoreVerticalIcon,
+  FilterIcon,
 } from "lucide-react"
 import {
   getProducts,
@@ -19,6 +20,8 @@ import {
   type Product,
   STARTING_POINT_CODE,
 } from "@/lib/product-store"
+import { getMachines, type Machine } from "@/lib/machine-store"
+import { getRouteLocations } from "@/lib/route-location-store"
 import {
   Table,
   TableBody,
@@ -250,6 +253,12 @@ export function EditProductsContent({ onSaveRef, onDirtyChange }: EditProductsCo
   const [searchQuery, setSearchQuery] = React.useState("")
   const [contextDeleteTarget, setContextDeleteTarget] = React.useState<{ kind: "saved" | "pending"; code: string } | null>(null)
 
+  // Route filter
+  const [routes, setRoutes] = React.useState<Machine[]>([])
+  const [routeFilter, setRouteFilter] = React.useState("")
+  const [routeFilterCodes, setRouteFilterCodes] = React.useState<Set<string> | null>(null)
+  const [routeFilterLoading, setRouteFilterLoading] = React.useState(false)
+
   // Coordinate drafts: productCode → { lat, lng }
   const [coordDrafts, setCoordDrafts] = React.useState<Record<string, { lat: number; lng: number }>>({})
   const [spCoord, setSpCoord] = React.useState<{ lat: number; lng: number } | null>(null)
@@ -266,7 +275,23 @@ export function EditProductsContent({ onSaveRef, onDirtyChange }: EditProductsCo
       setProducts(regular)
       setLoading(false)
     })
+    getMachines().then(setRoutes)
   }, [])
+
+  React.useEffect(() => {
+    if (!routeFilter) {
+      setRouteFilterCodes(null)
+      return
+    }
+    let cancelled = false
+    setRouteFilterLoading(true)
+    getRouteLocations(routeFilter).then((locations) => {
+      if (cancelled) return
+      setRouteFilterCodes(new Set(locations.map((l) => l.locationCode)))
+      setRouteFilterLoading(false)
+    })
+    return () => { cancelled = true }
+  }, [routeFilter])
 
   // ── Derived ───────────────────────────────────────────────────────────────
   const duplicateCodes = React.useMemo(() => {
@@ -313,12 +338,13 @@ export function EditProductsContent({ onSaveRef, onDirtyChange }: EditProductsCo
 
   const filteredProducts = React.useMemo(() => {
     const kw = searchQuery.trim().toLowerCase()
-    if (!kw) return sortedProducts
     return sortedProducts.filter((p) => {
+      if (routeFilterCodes && !routeFilterCodes.has(p.productCode)) return false
+      if (!kw) return true
       const d = pendingDraftKeys.includes(p.productCode) ? drafts[p.productCode] ?? p : p
       return d.productCode.toLowerCase().includes(kw) || d.productName.toLowerCase().includes(kw)
     })
-  }, [drafts, pendingDraftKeys, searchQuery, sortedProducts])
+  }, [drafts, pendingDraftKeys, searchQuery, sortedProducts, routeFilterCodes])
 
   const filteredNewDraftKeys = React.useMemo(() => {
     const kw = searchQuery.trim().toLowerCase()
@@ -576,6 +602,35 @@ export function EditProductsContent({ onSaveRef, onDirtyChange }: EditProductsCo
             <Input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search location..." className="h-8 pl-8 text-xs" />
           </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className={`gap-1.5 ${routeFilter ? "border-primary text-primary" : ""}`}
+              >
+                <FilterIcon className="size-3.5" />
+                {routeFilter
+                  ? `Route: ${routes.find((r) => r.value === routeFilter)?.label ?? routeFilter}`
+                  : "Filter by Route"}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="max-h-64 overflow-y-auto">
+              <DropdownMenuItem onClick={() => setRouteFilter("")}>
+                {!routeFilter && <CheckIcon className="size-3.5" />}
+                All Routes
+              </DropdownMenuItem>
+              {routes
+                .slice()
+                .sort((a, b) => a.value.localeCompare(b.value, undefined, { numeric: true, sensitivity: "base" }))
+                .map((route) => (
+                  <DropdownMenuItem key={route.value} onClick={() => setRouteFilter(route.value)}>
+                    {routeFilter === route.value && <CheckIcon className="size-3.5" />}
+                    {route.label}
+                  </DropdownMenuItem>
+                ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button size="sm" className="gap-1.5" onClick={startAdd}
             disabled={editingCode !== null || adding}>
             <PlusIcon className="size-3.5" />
@@ -802,6 +857,14 @@ export function EditProductsContent({ onSaveRef, onDirtyChange }: EditProductsCo
               <TableRow>
                 <TableCell colSpan={5} className="py-10 text-center text-muted-foreground">
                   No locations yet.
+                </TableCell>
+              </TableRow>
+            )}
+
+            {products.length > 0 && filteredProducts.length === 0 && filteredNewDraftKeys.length === 0 && !adding && (
+              <TableRow>
+                <TableCell colSpan={5} className="py-10 text-center text-muted-foreground">
+                  {routeFilterLoading ? "Loading route locations…" : "No locations match the current filter."}
                 </TableCell>
               </TableRow>
             )}

@@ -5,10 +5,7 @@ import {
   MapPinIcon,
   SearchIcon,
   LocateIcon,
-  RefreshCwIcon,
   ArrowUpDownIcon,
-  Maximize2Icon,
-  Minimize2Icon,
   XIcon,
   CrosshairIcon,
 } from "lucide-react"
@@ -51,7 +48,11 @@ function buildUserIcon(L: typeof import("leaflet")) {
   })
 }
 
-export function MapContent() {
+interface MapContentProps {
+  refreshRef?: React.MutableRefObject<(() => void) | null>
+}
+
+export function MapContent({ refreshRef }: MapContentProps) {
   const containerRef = React.useRef<HTMLDivElement>(null)
   const mapRef = React.useRef<import("leaflet").Map | null>(null)
   const leafletRef = React.useRef<typeof import("leaflet") | null>(null)
@@ -64,7 +65,6 @@ export function MapContent() {
   const [searchQuery, setSearchQuery] = React.useState("")
   const [selectedCode, setSelectedCode] = React.useState<string | null>(null)
   const [sortMode, setSortMode] = React.useState<SortMode>("code")
-  const [expanded, setExpanded] = React.useState(false)
   const [userLocation, setUserLocation] = React.useState<{ lat: number; lng: number } | null>(null)
   const [geoLoading, setGeoLoading] = React.useState(false)
   const [geoError, setGeoError] = React.useState("")
@@ -86,6 +86,10 @@ export function MapContent() {
       active = false
     }
   }, [loadProducts])
+
+  React.useEffect(() => {
+    if (refreshRef) refreshRef.current = () => { loadProducts() }
+  }, [loadProducts, refreshRef])
 
   const locations = React.useMemo<LocationItem[]>(
     () =>
@@ -195,8 +199,12 @@ export function MapContent() {
     })
 
     if (markersRef.current.size > 0 && !selectedCode) {
-      const group = L.featureGroup(Array.from(markersRef.current.values()))
-      map.fitBounds(group.getBounds().pad(0.2))
+      try {
+        const group = L.featureGroup(Array.from(markersRef.current.values()))
+        map.fitBounds(group.getBounds().pad(0.2))
+      } catch {
+        // Ignore — map may have just been torn down.
+      }
     }
   }, [locations, mapReady, selectedCode])
 
@@ -224,21 +232,52 @@ export function MapContent() {
     }
   }, [userLocation, mapReady])
 
-  // Invalidate size when expanded/collapsed
+  // Invalidate map size once it's mounted and ready
   React.useEffect(() => {
     const map = mapRef.current
     if (!map) return
-    const timer = setTimeout(() => map.invalidateSize(), 200)
+    const timer = setTimeout(() => {
+      try {
+        map.invalidateSize()
+      } catch {
+        // Ignore — map may have just been torn down.
+      }
+    }, 200)
     return () => clearTimeout(timer)
-  }, [expanded, mapReady])
+  }, [mapReady])
+
+  // Keep the map in sync with its container size — the container can resize
+  // due to sidebar toggling, window resizing, etc. Without this, Leaflet's
+  // internal position cache goes stale and later pan/zoom calls can throw
+  // (e.g. "undefined is not an object (evaluating 'el._leaflet_pos')").
+  React.useEffect(() => {
+    const map = mapRef.current
+    const container = containerRef.current
+    if (!map || !container || !mapReady || typeof ResizeObserver === "undefined") return
+
+    const observer = new ResizeObserver(() => {
+      if (mapRef.current !== map) return
+      try {
+        map.invalidateSize()
+      } catch {
+        // Ignore — map may have just been torn down.
+      }
+    })
+    observer.observe(container)
+    return () => observer.disconnect()
+  }, [mapReady])
 
   function focusLocation(location: LocationItem) {
     setSelectedCode(location.productCode)
     const map = mapRef.current
     const marker = markersRef.current.get(location.productCode)
-    if (map && marker) {
+    if (!map || !marker) return
+    try {
       map.flyTo([location.latitude, location.longitude], Math.max(map.getZoom(), 14), { duration: 0.6 })
       marker.openPopup()
+    } catch {
+      // Leaflet can throw if the map/marker position cache is momentarily
+      // stale (e.g. right after a container resize); safe to ignore.
     }
   }
 
@@ -247,8 +286,12 @@ export function MapContent() {
     const map = mapRef.current
     if (!L || !map || markersRef.current.size === 0) return
     setSelectedCode(null)
-    const group = L.featureGroup(Array.from(markersRef.current.values()))
-    map.fitBounds(group.getBounds().pad(0.2))
+    try {
+      const group = L.featureGroup(Array.from(markersRef.current.values()))
+      map.fitBounds(group.getBounds().pad(0.2))
+    } catch {
+      // Ignore stale position errors; the map remains usable.
+    }
   }
 
   function handleLocateMe() {
@@ -263,7 +306,11 @@ export function MapContent() {
         const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude }
         setUserLocation(loc)
         setGeoLoading(false)
-        mapRef.current?.flyTo([loc.lat, loc.lng], 13, { duration: 0.6 })
+        try {
+          mapRef.current?.flyTo([loc.lat, loc.lng], 13, { duration: 0.6 })
+        } catch {
+          // Ignore — map may have just been torn down.
+        }
       },
       () => {
         setGeoError("Could not get location.")
@@ -290,85 +337,49 @@ export function MapContent() {
   }
 
   return (
-    <div
-      className={cn(
-        "flex flex-col gap-3 p-4",
-        expanded ? "fixed inset-0 z-50 bg-background p-3" : "h-[calc(100vh-8rem)]"
-      )}
-    >
-      {/* Toolbar */}
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative w-full max-w-[220px]">
-          <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search location..."
-            className="h-8 pl-8 text-xs"
-          />
-        </div>
-
-        <Button
-          variant="outline"
-          size="sm"
-          className="gap-1.5"
-          onClick={() => setSortMode((m) => (m === "code" ? "distance" : "code"))}
-          disabled={!userLocation}
-          title={userLocation ? "Toggle sort order" : "Locate yourself to sort by distance"}
-        >
-          <ArrowUpDownIcon className="size-3.5" />
-          Sort: {sortMode === "code" ? "Code" : "Distance"}
-        </Button>
-
-        <Button variant="outline" size="sm" className="gap-1.5" onClick={handleLocateMe} disabled={geoLoading}>
-          <LocateIcon className="size-3.5" />
-          {geoLoading ? "Locating…" : "Locate Me"}
-        </Button>
-
-        <Button variant="outline" size="sm" className="gap-1.5" onClick={handleResetView}>
-          <CrosshairIcon className="size-3.5" />
-          Reset View
-        </Button>
-
-        <Button variant="outline" size="sm" className="gap-1.5" onClick={() => loadProducts()}>
-          <RefreshCwIcon className="size-3.5" />
-          Refresh
-        </Button>
-
-        <Button
-          variant="outline"
-          size="icon-sm"
-          className="ml-auto"
-          onClick={() => setExpanded((v) => !v)}
-          title={expanded ? "Exit fullscreen" : "Expand map"}
-        >
-          {expanded ? <Minimize2Icon className="size-3.5" /> : <Maximize2Icon className="size-3.5" />}
-        </Button>
-      </div>
-
+    <div className="flex h-full min-h-0 flex-col gap-3 p-3">
       {geoError && <p className="text-xs text-red-500">{geoError}</p>}
 
       {/* Map */}
       <div
         ref={containerRef}
-        className={cn(
-          "isolate relative z-0 w-full overflow-hidden rounded-lg border",
-          expanded ? "flex-1" : "h-[55%] min-h-[260px]"
-        )}
+        className="isolate relative z-0 w-full min-h-[200px] flex-1 overflow-hidden rounded-lg border"
       />
 
       {/* Location list */}
       <div className="flex min-h-0 flex-1 flex-col rounded-lg border">
-        <div className="flex items-center justify-between border-b px-3 py-2">
-          <p className="text-xs font-medium text-muted-foreground">
-            Showing {filteredLocations.length} of {locations.length} location
-            {locations.length === 1 ? "" : "s"}
-          </p>
-          {searchQuery && (
-            <Button variant="ghost" size="icon-xs" onClick={() => setSearchQuery("")}>
-              <XIcon className="size-3" />
-            </Button>
-          )}
+        <div className="flex flex-wrap items-center gap-2 border-b px-3 py-2">
+          <div className="relative w-full max-w-[220px]">
+            <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search location..."
+              className="h-8 pl-8 pr-7 text-xs"
+            />
+            {searchQuery && (
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                className="absolute right-1 top-1/2 -translate-y-1/2"
+                onClick={() => setSearchQuery("")}
+              >
+                <XIcon className="size-3" />
+              </Button>
+            )}
+          </div>
+
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            onClick={() => setSortMode((m) => (m === "code" ? "distance" : "code"))}
+            disabled={!userLocation}
+            title={userLocation ? "Toggle sort order" : "Locate yourself to sort by distance"}
+          >
+            <ArrowUpDownIcon className="size-3.5" />
+            Sort: {sortMode === "code" ? "Code" : "Distance"}
+          </Button>
         </div>
         <div className="flex-1 overflow-y-auto">
           {filteredLocations.length === 0 ? (
@@ -412,6 +423,24 @@ export function MapContent() {
               })}
             </ul>
           )}
+        </div>
+
+        <div className="flex items-center justify-between gap-2 border-t px-3 py-2">
+          <p className="text-xs font-medium text-muted-foreground">
+            Showing {filteredLocations.length} of {locations.length} location
+            {locations.length === 1 ? "" : "s"}
+          </p>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" className="gap-1.5" onClick={handleResetView}>
+              <CrosshairIcon className="size-3.5" />
+              Reset View
+            </Button>
+
+            <Button variant="outline" size="sm" className="gap-1.5" onClick={handleLocateMe} disabled={geoLoading}>
+              <LocateIcon className="size-3.5" />
+              {geoLoading ? "Locating…" : "Locate Me"}
+            </Button>
+          </div>
         </div>
       </div>
     </div>

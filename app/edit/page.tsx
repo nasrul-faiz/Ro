@@ -6,18 +6,21 @@ const sections = [
   {
     href: "/edit/machines",
     icon: ServerIcon,
+    iconClassName: "text-sky-500",
     title: "Route",
     description: "Add, edit, or remove delivery routes.",
   },
   {
     href: "/edit/machine-products",
     icon: LayoutGridIcon,
+    iconClassName: "text-emerald-500",
     title: "Route Location",
     description: "Assign locations to each route.",
   },
   {
     href: "/edit/products",
     icon: PackageIcon,
+    iconClassName: "text-amber-500",
     title: "Location Master",
     description: "Manage location records for route planning.",
   },
@@ -33,9 +36,7 @@ export default function EditPage() {
             href={s.href}
             className="group flex flex-col gap-3 rounded-xl border bg-card p-5 transition-colors hover:bg-accent"
           >
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted group-hover:bg-background transition-colors">
-              <s.icon className="size-5 text-foreground" />
-            </div>
+            <s.icon className={`size-6 ${s.iconClassName}`} />
             <div>
               <p className="font-semibold text-sm">{s.title}</p>
               <p className="text-xs text-muted-foreground mt-0.5">
