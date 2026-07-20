@@ -205,7 +205,7 @@ export function AppLayout({
       </Sidebar>
 
       <SidebarInset>
-        <header className="sticky top-0 z-20 flex h-14 items-center gap-2 border-b bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/70">
+        <header className="sticky top-0 z-20 flex h-14 items-center gap-2 border-b border-border/50 bg-background/35 px-4 backdrop-blur-2xl backdrop-saturate-150 supports-backdrop-filter:bg-background/25">
           <SidebarTrigger />
           <h1 className="font-semibold">{title}</h1>
         </header>
