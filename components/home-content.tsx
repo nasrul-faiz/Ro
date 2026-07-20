@@ -1,7 +1,17 @@
 "use client"
 
 import * as React from "react"
-import { ChevronsUpDownIcon, FilterIcon, MapPinIcon, ArrowUpDownIcon, SettingsIcon, LocateIcon, Columns3Icon } from "lucide-react"
+import {
+  ChevronsUpDownIcon,
+  ChevronUpIcon,
+  ChevronDownIcon,
+  FilterIcon,
+  ArrowUpDownIcon,
+  SettingsIcon,
+  LocateIcon,
+  Columns3Icon,
+  XIcon,
+} from "lucide-react"
 import { useRouter } from "next/navigation"
 import { getMachines, type Machine } from "@/lib/machine-store"
 import { getProducts, type Product } from "@/lib/product-store"
@@ -33,11 +43,12 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { useSidebar } from "@/components/ui/sidebar"
 import { LoadingText } from "@/components/ui/loading-text"
 import { cn, compareCodes, isDeliveryActive, getDeliveryDescription } from "@/lib/utils"
@@ -74,6 +85,46 @@ const DEFAULT_COLUMN_VISIBILITY: Record<ColumnId, boolean> = {
   km: false,
 }
 
+const SORTABLE_COLUMNS: { id: ColumnId; label: string }[] = [
+  { id: "code", label: "Code" },
+  { id: "name", label: "Name" },
+  { id: "delivery", label: "Delivery" },
+  { id: "km", label: "KM" },
+]
+
+type SortConfig = { key: ColumnId; dir: "asc" | "desc" }
+
+type DeliveryFilter = "all" | "active" | "inactive"
+
+type SettingsTab = "filter" | "sorting" | "columns"
+
+function getSortValue(assignment: RouteLocation, key: ColumnId, productMap: Map<string, Product>) {
+  switch (key) {
+    case "name":
+      return productMap.get(assignment.locationCode)?.productName ?? assignment.locationName ?? ""
+    case "delivery":
+      return productMap.get(assignment.locationCode)?.image || assignment.delivery || ""
+    default:
+      return ""
+  }
+}
+
+function compareBySort(a: RouteLocation, b: RouteLocation, sort: SortConfig, productMap: Map<string, Product>) {
+  let result = 0
+  if (sort.key === "code") {
+    result = compareCodes(a.locationCode, b.locationCode)
+  } else if (sort.key === "km") {
+    const av = a.km ?? Number.POSITIVE_INFINITY
+    const bv = b.km ?? Number.POSITIVE_INFINITY
+    result = av - bv
+  } else {
+    const av = String(getSortValue(a, sort.key, productMap))
+    const bv = String(getSortValue(b, sort.key, productMap))
+    result = av.localeCompare(bv, undefined, { numeric: true, sensitivity: "base" })
+  }
+  return sort.dir === "desc" ? -result : result
+}
+
 interface HomeContentCache {
   machines: Machine[]
   products: Product[]
@@ -108,6 +159,10 @@ export function HomeContent({ initialRouteId }: HomeContentProps) {
   const [liveKmCache, setLiveKmCache] = React.useState<Record<string, number | null>>({})
   const liveKmFetchingRef = React.useRef<Set<string>>(new Set())
   const [columnVisibility, setColumnVisibility] = React.useState<Record<ColumnId, boolean>>(DEFAULT_COLUMN_VISIBILITY)
+  const [deliveryFilter, setDeliveryFilter] = React.useState<DeliveryFilter>("all")
+  const [sortConfig, setSortConfig] = React.useState<SortConfig | null>(null)
+  const [settingsOpen, setSettingsOpen] = React.useState(false)
+  const [settingsTab, setSettingsTab] = React.useState<SettingsTab>("filter")
   const router = useRouter()
   const { isMobile, setOpen, setOpenMobile } = useSidebar()
 
@@ -194,9 +249,21 @@ export function HomeContent({ initialRouteId }: HomeContentProps) {
 
   const visibleAssignments = React.useMemo(() => {
     if (!selectedRoute?.value) return []
-    const sorted = assignments
-      .filter((item) => item.routeId === selectedRoute.value)
-      .sort((a, b) => compareCodes(a.locationCode, b.locationCode))
+    let filtered = assignments.filter((item) => item.routeId === selectedRoute.value)
+
+    if (deliveryFilter !== "all") {
+      filtered = filtered.filter((item) => {
+        const deliveryValue = productMap.get(item.locationCode)?.image || item.delivery
+        const active = isDeliveryActive(deliveryValue)
+        return deliveryFilter === "active" ? active : !active
+      })
+    }
+
+    if (sortConfig) {
+      return [...filtered].sort((a, b) => compareBySort(a, b, sortConfig, productMap))
+    }
+
+    const sorted = [...filtered].sort((a, b) => compareCodes(a.locationCode, b.locationCode))
 
     // Active-today locations first, locations with no delivery today pushed to the bottom.
     const active: RouteLocation[] = []
@@ -210,7 +277,7 @@ export function HomeContent({ initialRouteId }: HomeContentProps) {
       }
     })
     return [...active, ...inactive]
-  }, [assignments, selectedRoute, productMap])
+  }, [assignments, selectedRoute, productMap, deliveryFilter, sortConfig])
 
   const items = React.useMemo(
     () =>
@@ -379,69 +446,16 @@ export function HomeContent({ initialRouteId }: HomeContentProps) {
                   ? `${customStart.lat.toFixed(5)}, ${customStart.lng.toFixed(5)}`
                   : "Default Starting Point"}
             </button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  type="button"
-                  size="sm"
-                  className="h-7 text-[11px] gap-1.5 px-2.5 border-slate-400 bg-slate-300 text-slate-800 hover:bg-slate-400 dark:border-slate-500 dark:bg-slate-600 dark:text-slate-100 dark:hover:bg-slate-500"
-                  variant="outline"
-                >
-                  <SettingsIcon className="size-3.5" />
-                  Settings
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem>
-                  <FilterIcon />
-                  Filter
-                </DropdownMenuItem>
-                <DropdownMenuItem>
-                  <ArrowUpDownIcon />
-                  Sorting
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  type="button"
-                  size="sm"
-                  className="h-7 text-[11px] gap-1.5 px-2.5 border-slate-400 bg-slate-300 text-slate-800 hover:bg-slate-400 dark:border-slate-500 dark:bg-slate-600 dark:text-slate-100 dark:hover:bg-slate-500"
-                  variant="outline"
-                >
-                  <Columns3Icon className="size-3.5" />
-                  Columns
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent align="end" className="w-64">
-                <FieldSet>
-                  <FieldLegend variant="label">Customize columns</FieldLegend>
-                  <FieldDescription>
-                    Select the columns you want to show in the table.
-                  </FieldDescription>
-                  <FieldGroup className="gap-3">
-                    {COLUMN_OPTIONS.map((column) => (
-                      <Field key={column.id} orientation="horizontal">
-                        <Checkbox
-                          id={`route-list-column-${column.id}`}
-                          name={`route-list-column-${column.id}`}
-                          checked={columnVisibility[column.id]}
-                          onCheckedChange={(checked) => toggleColumn(column.id, checked === true)}
-                          disabled={columnVisibility[column.id] && visibleColumns.length === 1}
-                        />
-                        <FieldLabel
-                          htmlFor={`route-list-column-${column.id}`}
-                          className="font-normal"
-                        >
-                          {column.label}
-                        </FieldLabel>
-                      </Field>
-                    ))}
-                  </FieldGroup>
-                </FieldSet>
-              </PopoverContent>
-            </Popover>
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => setSettingsOpen(true)}
+              className="h-7 text-[11px] gap-1.5 px-2.5 border-slate-400 bg-slate-300 text-slate-800 hover:bg-slate-400 dark:border-slate-500 dark:bg-slate-600 dark:text-slate-100 dark:hover:bg-slate-500"
+              variant="outline"
+            >
+              <SettingsIcon className="size-3.5" />
+              Settings
+            </Button>
           </div>
 
           <div className="overflow-x-auto">
@@ -581,6 +595,161 @@ export function HomeContent({ initialRouteId }: HomeContentProps) {
           )}
         </div>
       )}
+
+      <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
+        <DialogContent className="flex max-h-[80vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-md">
+          <DialogHeader className="shrink-0 border-b px-5 pt-5 pb-4">
+            <DialogTitle>Table Settings</DialogTitle>
+            <DialogDescription className="sr-only">
+              Filter, sort and customize the visible columns of the route list table.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="shrink-0 px-4 pt-3">
+            <div className="flex gap-1 rounded-lg bg-muted p-1">
+              {(
+                [
+                  { id: "filter", label: "Filter", icon: <FilterIcon className="size-3.5" /> },
+                  { id: "sorting", label: "Sorting", icon: <ArrowUpDownIcon className="size-3.5" /> },
+                  { id: "columns", label: "Columns", icon: <Columns3Icon className="size-3.5" /> },
+                ] as const
+              ).map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setSettingsTab(tab.id)}
+                  className={cn(
+                    "flex flex-1 items-center justify-center gap-1.5 rounded-md py-1.5 text-xs font-semibold transition-colors",
+                    settingsTab === tab.id
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {tab.icon}
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+            {settingsTab === "filter" && (
+              <FieldSet>
+                <FieldLegend variant="label">Delivery status</FieldLegend>
+                <FieldDescription>
+                  Show all locations, or only those that are active or inactive for delivery today.
+                </FieldDescription>
+                <FieldGroup className="gap-1.5">
+                  {(
+                    [
+                      { id: "all", label: "All locations" },
+                      { id: "active", label: "Active today only" },
+                      { id: "inactive", label: "Inactive today only" },
+                    ] as const
+                  ).map((option) => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      onClick={() => setDeliveryFilter(option.id)}
+                      className={cn(
+                        "flex items-center justify-between rounded-lg border px-3 py-2 text-left text-sm font-medium transition-colors",
+                        deliveryFilter === option.id
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-transparent bg-muted/50 text-muted-foreground hover:bg-muted"
+                      )}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </FieldGroup>
+              </FieldSet>
+            )}
+
+            {settingsTab === "sorting" && (
+              <div className="flex flex-col gap-4">
+                <FieldSet>
+                  <FieldLegend variant="label">Quick sort</FieldLegend>
+                  <FieldDescription>
+                    Pick a column to sort by. Click it again to switch between ascending and descending.
+                  </FieldDescription>
+                  <FieldGroup className="gap-1.5">
+                    {SORTABLE_COLUMNS.map((column) => {
+                      const isActive = sortConfig?.key === column.id
+                      const dir = isActive ? sortConfig.dir : "asc"
+                      return (
+                        <button
+                          key={column.id}
+                          type="button"
+                          onClick={() =>
+                            setSortConfig(
+                              isActive ? { key: column.id, dir: dir === "asc" ? "desc" : "asc" } : { key: column.id, dir: "asc" }
+                            )
+                          }
+                          className={cn(
+                            "flex items-center justify-between rounded-lg border px-3 py-2 text-sm font-medium transition-colors",
+                            isActive
+                              ? "border-primary bg-primary/10 text-primary"
+                              : "border-transparent bg-muted/50 text-muted-foreground hover:bg-muted"
+                          )}
+                        >
+                          <span>{column.label}</span>
+                          {isActive ? (
+                            dir === "asc" ? (
+                              <ChevronUpIcon className="size-4" />
+                            ) : (
+                              <ChevronDownIcon className="size-4" />
+                            )
+                          ) : (
+                            <ChevronsUpDownIcon className="size-4 opacity-40" />
+                          )}
+                        </button>
+                      )
+                    })}
+                  </FieldGroup>
+                </FieldSet>
+                {sortConfig && (
+                  <button
+                    type="button"
+                    onClick={() => setSortConfig(null)}
+                    className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-destructive"
+                  >
+                    <XIcon className="size-4" />
+                    Clear sorting
+                  </button>
+                )}
+              </div>
+            )}
+
+            {settingsTab === "columns" && (
+              <FieldSet>
+                <FieldLegend variant="label">Visible columns</FieldLegend>
+                <FieldDescription>
+                  Select the columns you want to show in the table.
+                </FieldDescription>
+                <FieldGroup className="gap-3">
+                  {COLUMN_OPTIONS.map((column) => (
+                    <Field key={column.id} orientation="horizontal">
+                      <Checkbox
+                        id={`route-list-column-${column.id}`}
+                        name={`route-list-column-${column.id}`}
+                        checked={columnVisibility[column.id]}
+                        onCheckedChange={(checked) => toggleColumn(column.id, checked === true)}
+                        disabled={columnVisibility[column.id] && visibleColumns.length === 1}
+                      />
+                      <FieldLabel
+                        htmlFor={`route-list-column-${column.id}`}
+                        className="font-normal"
+                      >
+                        {column.label}
+                      </FieldLabel>
+                    </Field>
+                  ))}
+                </FieldGroup>
+              </FieldSet>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
