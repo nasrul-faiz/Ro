@@ -1,17 +1,21 @@
 "use client"
 
 import * as React from "react"
-import { ChevronsUpDownIcon, FilterIcon, MapPinIcon, ArrowUpDownIcon, SettingsIcon, LocateIcon } from "lucide-react"
+import { ChevronsUpDownIcon, FilterIcon, MapPinIcon, ArrowUpDownIcon, SettingsIcon, LocateIcon, Columns3Icon } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { getMachines, type Machine } from "@/lib/machine-store"
 import { getProducts, type Product } from "@/lib/product-store"
 import { getRouteLocations, type RouteLocation } from "@/lib/route-location-store"
 import { getAllDOs, DELIVERY_ORDERS_UPDATED_EVENT, type DeliveryOrder } from "@/lib/do-store"
 import { getDrivingDistanceKm } from "@/lib/geo"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   Field,
   FieldDescription,
+  FieldGroup,
   FieldLabel,
+  FieldLegend,
+  FieldSet,
 } from "@/components/ui/field"
 import {
   Table,
@@ -39,6 +43,36 @@ import { LoadingText } from "@/components/ui/loading-text"
 import { cn, compareCodes, isDeliveryActive, getDeliveryDescription } from "@/lib/utils"
 
 const ALL_ROUTES_VALUE = "__all_routes__"
+
+const COLUMN_OPTIONS = [
+  { id: "no", label: "No" },
+  { id: "route", label: "Route" },
+  { id: "code", label: "Code" },
+  { id: "name", label: "Name" },
+  { id: "delivery", label: "Delivery" },
+  { id: "km", label: "KM" },
+] as const
+
+type ColumnId = (typeof COLUMN_OPTIONS)[number]["id"]
+
+function formatRouteCode(code: string) {
+  const match = code.match(/^([A-Za-z]+)\s*(\d+)$/)
+  if (!match) return code
+  return `${match[1]} ${match[2]}`
+}
+
+function formatKm(value: number) {
+  return `${value.toFixed(1)} Km`
+}
+
+const DEFAULT_COLUMN_VISIBILITY: Record<ColumnId, boolean> = {
+  no: true,
+  route: false,
+  code: true,
+  name: true,
+  delivery: true,
+  km: false,
+}
 
 interface HomeContentCache {
   machines: Machine[]
@@ -73,6 +107,7 @@ export function HomeContent({ initialRouteId }: HomeContentProps) {
   const [geoError, setGeoError] = React.useState("")
   const [liveKmCache, setLiveKmCache] = React.useState<Record<string, number | null>>({})
   const liveKmFetchingRef = React.useRef<Set<string>>(new Set())
+  const [columnVisibility, setColumnVisibility] = React.useState<Record<ColumnId, boolean>>(DEFAULT_COLUMN_VISIBILITY)
   const router = useRouter()
   const { isMobile, setOpen, setOpenMobile } = useSidebar()
 
@@ -145,6 +180,15 @@ export function HomeContent({ initialRouteId }: HomeContentProps) {
     const machine = machines.find((item) => item.value === initialRouteId) ?? null
     setSelectedRoute(machine)
   }, [initialRouteId, loading, machines])
+
+  const visibleColumns = React.useMemo(
+    () => COLUMN_OPTIONS.filter((column) => columnVisibility[column.id]),
+    [columnVisibility]
+  )
+
+  function toggleColumn(id: ColumnId, checked: boolean) {
+    setColumnVisibility((prev) => ({ ...prev, [id]: checked }))
+  }
 
   const productMap = React.useMemo(() => new Map(products.map((p) => [p.productCode, p])), [products])
 
@@ -358,18 +402,58 @@ export function HomeContent({ initialRouteId }: HomeContentProps) {
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  type="button"
+                  size="sm"
+                  className="h-7 text-[11px] gap-1.5 px-2.5 border-slate-400 bg-slate-300 text-slate-800 hover:bg-slate-400 dark:border-slate-500 dark:bg-slate-600 dark:text-slate-100 dark:hover:bg-slate-500"
+                  variant="outline"
+                >
+                  <Columns3Icon className="size-3.5" />
+                  Columns
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-64">
+                <FieldSet>
+                  <FieldLegend variant="label">Customize columns</FieldLegend>
+                  <FieldDescription>
+                    Select the columns you want to show in the table.
+                  </FieldDescription>
+                  <FieldGroup className="gap-3">
+                    {COLUMN_OPTIONS.map((column) => (
+                      <Field key={column.id} orientation="horizontal">
+                        <Checkbox
+                          id={`route-list-column-${column.id}`}
+                          name={`route-list-column-${column.id}`}
+                          checked={columnVisibility[column.id]}
+                          onCheckedChange={(checked) => toggleColumn(column.id, checked === true)}
+                          disabled={columnVisibility[column.id] && visibleColumns.length === 1}
+                        />
+                        <FieldLabel
+                          htmlFor={`route-list-column-${column.id}`}
+                          className="font-normal"
+                        >
+                          {column.label}
+                        </FieldLabel>
+                      </Field>
+                    ))}
+                  </FieldGroup>
+                </FieldSet>
+              </PopoverContent>
+            </Popover>
           </div>
 
           <div className="overflow-x-auto">
             <Table className="text-xs min-w-[600px]">
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
-                  {["No", "Code", "Name", "Delivery", "KM"].map((h) => (
+                  {visibleColumns.map((column) => (
                     <TableHead
-                      key={h}
+                      key={column.id}
                       className="text-[11px] font-semibold tracking-wide py-3 px-5 text-center"
                     >
-                      {h}
+                      {column.label}
                     </TableHead>
                   ))}
                 </TableRow>
@@ -377,7 +461,7 @@ export function HomeContent({ initialRouteId }: HomeContentProps) {
               <TableBody>
                 {visibleAssignments.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="py-10 text-center text-muted-foreground">
+                    <TableCell colSpan={visibleColumns.length} className="py-10 text-center text-muted-foreground">
                       No route locations assigned to this route yet.
                     </TableCell>
                   </TableRow>
@@ -396,39 +480,53 @@ export function HomeContent({ initialRouteId }: HomeContentProps) {
                             : "text-muted-foreground/60 hover:bg-muted/30"
                         )}
                       >
-                        <TableCell className="py-2.5 px-5 text-center font-medium tabular-nums">
-                          {index + 1}
-                        </TableCell>
-                        <TableCell className="py-2.5 px-5 text-center font-medium">
-                          {assignment.locationCode}
-                        </TableCell>
-                        <TableCell className="py-2.5 px-5 text-center font-medium">
-                          {product?.productName ?? assignment.locationName ?? "Unknown"}
-                        </TableCell>
-                        <TableCell className="py-2.5 px-5 text-center text-muted-foreground">
-                          {deliveryValue ? (
-                            <Popover>
-                              <PopoverTrigger asChild>
-                                <button
-                                  type="button"
-                                  className="rounded px-1.5 py-0.5 underline decoration-dotted underline-offset-2 hover:bg-muted/60 hover:text-foreground"
-                                >
-                                  {deliveryValue}
-                                </button>
-                              </PopoverTrigger>
-                              <PopoverContent className="w-auto px-3 py-2 text-xs">
-                                {getDeliveryDescription(deliveryValue)}
-                              </PopoverContent>
-                            </Popover>
-                          ) : (
-                            "-"
-                          )}
-                        </TableCell>
+                        {columnVisibility.no && (
+                          <TableCell className="py-2.5 px-5 text-center font-medium tabular-nums">
+                            {index + 1}
+                          </TableCell>
+                        )}
+                        {columnVisibility.route && (
+                          <TableCell className="py-2.5 px-5 text-center font-medium">
+                            {formatRouteCode(assignment.routeId)}
+                          </TableCell>
+                        )}
+                        {columnVisibility.code && (
+                          <TableCell className="py-2.5 px-5 text-center font-medium">
+                            {assignment.locationCode}
+                          </TableCell>
+                        )}
+                        {columnVisibility.name && (
+                          <TableCell className="py-2.5 px-5 text-center font-medium">
+                            {product?.productName ?? assignment.locationName ?? "Unknown"}
+                          </TableCell>
+                        )}
+                        {columnVisibility.delivery && (
+                          <TableCell className="py-2.5 px-5 text-center text-muted-foreground">
+                            {deliveryValue ? (
+                              <Popover>
+                                <PopoverTrigger asChild>
+                                  <button
+                                    type="button"
+                                    className="rounded px-1.5 py-0.5 hover:bg-muted/60 hover:text-foreground"
+                                  >
+                                    {deliveryValue}
+                                  </button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto px-3 py-2 text-xs">
+                                  {getDeliveryDescription(deliveryValue)}
+                                </PopoverContent>
+                              </Popover>
+                            ) : (
+                              "-"
+                            )}
+                          </TableCell>
+                        )}
+                        {columnVisibility.km && (
                         <TableCell className="py-2.5 px-5 text-center font-medium tabular-nums">
                           {customStart ? (
                             assignment.locationCode in liveKmCache ? (
                               liveKmCache[assignment.locationCode] != null ? (
-                                <span>{liveKmCache[assignment.locationCode]!.toFixed(1)} km</span>
+                                <span>{formatKm(liveKmCache[assignment.locationCode]!)}</span>
                               ) : (
                                 <span className="text-muted-foreground/40">—</span>
                               )
@@ -436,11 +534,12 @@ export function HomeContent({ initialRouteId }: HomeContentProps) {
                               <span className="text-muted-foreground/40 text-[10px]">…</span>
                             )
                           ) : assignment.km != null ? (
-                            <span>{assignment.km} km</span>
+                            <span>{formatKm(assignment.km)}</span>
                           ) : (
                             <span className="text-muted-foreground/40">—</span>
                           )}
                         </TableCell>
+                        )}
                       </TableRow>
                     )
                   })
@@ -448,7 +547,7 @@ export function HomeContent({ initialRouteId }: HomeContentProps) {
               </TableBody>
               <TableFooter>
                 <TableRow className="hover:bg-transparent">
-                  <TableCell colSpan={5} className="py-3 px-5">
+                  <TableCell colSpan={visibleColumns.length} className="py-3 px-5">
                     <div className="flex items-center justify-between">
                       <span className={cn(
                         "text-[11px] font-semibold tracking-widest uppercase",
