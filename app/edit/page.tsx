@@ -34,7 +34,7 @@ export default function EditPage() {
           <Link
             key={s.href}
             href={s.href}
-            className="group flex flex-col gap-3 rounded-xl border bg-card p-5 transition-colors hover:bg-accent"
+            className="glass-card group flex flex-col gap-3 rounded-xl p-5 transition-colors hover:bg-accent/40"
           >
             <s.icon className={`size-6 ${s.iconClassName}`} />
             <div>

@@ -11,12 +11,27 @@ import {
   LocateIcon,
   Columns3Icon,
   XIcon,
+  ListOrderedIcon,
+  BookmarkIcon,
+  SaveIcon,
+  Trash2Icon,
+  CalculatorIcon,
 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { getMachines, type Machine } from "@/lib/machine-store"
 import { getProducts, type Product } from "@/lib/product-store"
-import { getRouteLocations, type RouteLocation } from "@/lib/route-location-store"
+import {
+  getRouteLocations,
+  upsertRouteLocations,
+  type RouteLocation,
+} from "@/lib/route-location-store"
 import { getAllDOs, DELIVERY_ORDERS_UPDATED_EVENT, type DeliveryOrder } from "@/lib/do-store"
+import {
+  getCustomOrders,
+  saveCustomOrder,
+  deleteCustomOrder,
+  type CustomOrder,
+} from "@/lib/custom-order-store"
 import { getDrivingDistanceKm } from "@/lib/geo"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
@@ -98,6 +113,8 @@ type DeliveryFilter = "all" | "active" | "inactive"
 
 type SettingsTab = "filter" | "sorting" | "columns"
 
+type ReorderTab = "custom" | "km" | "saved"
+
 function getSortValue(assignment: RouteLocation, key: ColumnId, productMap: Map<string, Product>) {
   switch (key) {
     case "name":
@@ -163,6 +180,16 @@ export function HomeContent({ initialRouteId }: HomeContentProps) {
   const [sortConfig, setSortConfig] = React.useState<SortConfig | null>(null)
   const [settingsOpen, setSettingsOpen] = React.useState(false)
   const [settingsTab, setSettingsTab] = React.useState<SettingsTab>("filter")
+  const [reorderOpen, setReorderOpen] = React.useState(false)
+  const [reorderTab, setReorderTab] = React.useState<ReorderTab>("custom")
+  const [reorderDraft, setReorderDraft] = React.useState<Record<string, number>>({})
+  const [reorderName, setReorderName] = React.useState("")
+  const [savingOrder, setSavingOrder] = React.useState(false)
+  const [savedOrders, setSavedOrders] = React.useState<CustomOrder[]>([])
+  const [savedOrdersLoading, setSavedOrdersLoading] = React.useState(false)
+  const [activeCustomOrder, setActiveCustomOrder] = React.useState<CustomOrder | null>(null)
+  const [kmStepDraft, setKmStepDraft] = React.useState<Record<string, number>>({})
+  const [savingKm, setSavingKm] = React.useState(false)
   const router = useRouter()
   const { isMobile, setOpen, setOpenMobile } = useSidebar()
 
@@ -236,6 +263,42 @@ export function HomeContent({ initialRouteId }: HomeContentProps) {
     setSelectedRoute(machine)
   }, [initialRouteId, loading, machines])
 
+  // Custom sort orders are tied to a single route, so drop the active one
+  // whenever the selected route changes.
+  React.useEffect(() => {
+    setActiveCustomOrder(null)
+  }, [selectedRoute?.value])
+
+  // Seed the reorder draft and load saved orders whenever the Reorder dialog opens.
+  React.useEffect(() => {
+    if (!reorderOpen || !selectedRoute?.value) return
+
+    const routeValue = selectedRoute.value
+    const list = assignments
+      .filter((item) => item.routeId === routeValue)
+      .sort((a, b) => compareCodes(a.locationCode, b.locationCode))
+
+    const seeded: Record<string, number> = {}
+    list.forEach((assignment) => {
+      const existing = activeCustomOrder?.items.find(
+        (item) => item.locationCode === assignment.locationCode
+      )
+      if (existing) {
+        seeded[assignment.locationCode] = existing.sortOrder
+      }
+    })
+    setReorderDraft(seeded)
+    setReorderName("")
+    setKmStepDraft({})
+
+    setSavedOrdersLoading(true)
+    getCustomOrders(routeValue).then((orders) => {
+      setSavedOrders(orders)
+      setSavedOrdersLoading(false)
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reorderOpen, selectedRoute?.value])
+
   const visibleColumns = React.useMemo(
     () => COLUMN_OPTIONS.filter((column) => columnVisibility[column.id]),
     [columnVisibility]
@@ -247,6 +310,45 @@ export function HomeContent({ initialRouteId }: HomeContentProps) {
 
   const productMap = React.useMemo(() => new Map(products.map((p) => [p.productCode, p])), [products])
 
+  const reorderAssignments = React.useMemo(() => {
+    if (!selectedRoute?.value) return []
+    return assignments
+      .filter((item) => item.routeId === selectedRoute.value)
+      .sort((a, b) => compareCodes(a.locationCode, b.locationCode))
+  }, [assignments, selectedRoute])
+
+  // Same ordering used for the KM step calculator: follow the applied custom
+  // order when one is active, otherwise fall back to the location code order.
+  const kmCalcAssignments = React.useMemo(() => {
+    if (!selectedRoute?.value) return []
+    const base = assignments.filter((item) => item.routeId === selectedRoute.value)
+
+    if (activeCustomOrder && activeCustomOrder.routeId === selectedRoute.value) {
+      const orderMap = new Map(activeCustomOrder.items.map((item) => [item.locationCode, item.sortOrder]))
+      return [...base].sort((a, b) => {
+        const av = orderMap.get(a.locationCode) ?? Number.POSITIVE_INFINITY
+        const bv = orderMap.get(b.locationCode) ?? Number.POSITIVE_INFINITY
+        return av - bv
+      })
+    }
+
+    return [...base].sort((a, b) => compareCodes(a.locationCode, b.locationCode))
+  }, [assignments, selectedRoute, activeCustomOrder])
+
+  // Running total: each location's total KM = previous location's total + its own step distance.
+  const kmCalcTotals = React.useMemo(() => {
+    let running = 0
+    const totals: Record<string, number> = {}
+    kmCalcAssignments.forEach((assignment) => {
+      const step = kmStepDraft[assignment.locationCode]
+      if (step != null) {
+        running += step
+      }
+      totals[assignment.locationCode] = running
+    })
+    return totals
+  }, [kmCalcAssignments, kmStepDraft])
+
   const visibleAssignments = React.useMemo(() => {
     if (!selectedRoute?.value) return []
     let filtered = assignments.filter((item) => item.routeId === selectedRoute.value)
@@ -256,6 +358,15 @@ export function HomeContent({ initialRouteId }: HomeContentProps) {
         const deliveryValue = productMap.get(item.locationCode)?.image || item.delivery
         const active = isDeliveryActive(deliveryValue)
         return deliveryFilter === "active" ? active : !active
+      })
+    }
+
+    if (activeCustomOrder && activeCustomOrder.routeId === selectedRoute.value) {
+      const orderMap = new Map(activeCustomOrder.items.map((item) => [item.locationCode, item.sortOrder]))
+      return [...filtered].sort((a, b) => {
+        const av = orderMap.get(a.locationCode) ?? Number.POSITIVE_INFINITY
+        const bv = orderMap.get(b.locationCode) ?? Number.POSITIVE_INFINITY
+        return av - bv
       })
     }
 
@@ -277,7 +388,7 @@ export function HomeContent({ initialRouteId }: HomeContentProps) {
       }
     })
     return [...active, ...inactive]
-  }, [assignments, selectedRoute, productMap, deliveryFilter, sortConfig])
+  }, [assignments, selectedRoute, productMap, deliveryFilter, sortConfig, activeCustomOrder])
 
   const items = React.useMemo(
     () =>
@@ -350,6 +461,90 @@ export function HomeContent({ initialRouteId }: HomeContentProps) {
     }
 
     router.push(`/home/${encodeURIComponent(nextValue)}`)
+  }
+
+  function handleReorderNumberChange(locationCode: string, raw: string) {
+    if (raw === "") {
+      setReorderDraft((prev) => {
+        const next = { ...prev }
+        delete next[locationCode]
+        return next
+      })
+      return
+    }
+    const num = Math.max(0, parseInt(raw) || 0)
+    setReorderDraft((prev) => ({ ...prev, [locationCode]: num }))
+  }
+
+  async function handleSaveReorder() {
+    if (!selectedRoute?.value || !reorderName.trim() || reorderAssignments.length === 0) return
+
+    setSavingOrder(true)
+    const assignedValues = Object.values(reorderDraft).filter((value) => value != null)
+    let nextFallback = (assignedValues.length > 0 ? Math.max(...assignedValues) : 0) + 1
+    const items = reorderAssignments.map((assignment) => {
+      const value = reorderDraft[assignment.locationCode]
+      return {
+        locationCode: assignment.locationCode,
+        sortOrder: value != null ? value : nextFallback++,
+      }
+    })
+    const saved = await saveCustomOrder(selectedRoute.value, reorderName.trim(), items)
+    setSavingOrder(false)
+
+    if (saved) {
+      setSavedOrders((prev) => [saved, ...prev])
+      setActiveCustomOrder(saved)
+      setSortConfig(null)
+      setReorderName("")
+      setReorderTab("saved")
+    }
+  }
+
+  function handleApplySavedOrder(order: CustomOrder) {
+    setActiveCustomOrder(order)
+    setSortConfig(null)
+  }
+
+  function handleClearCustomOrder() {
+    setActiveCustomOrder(null)
+  }
+
+  async function handleDeleteSavedOrder(id: number) {
+    await deleteCustomOrder(id)
+    setSavedOrders((prev) => prev.filter((order) => order.id !== id))
+    setActiveCustomOrder((prev) => (prev?.id === id ? null : prev))
+  }
+
+  function handleKmStepChange(locationCode: string, raw: string) {
+    if (raw === "") {
+      setKmStepDraft((prev) => {
+        const next = { ...prev }
+        delete next[locationCode]
+        return next
+      })
+      return
+    }
+    const num = Math.max(0, parseFloat(raw) || 0)
+    setKmStepDraft((prev) => ({ ...prev, [locationCode]: num }))
+  }
+
+  async function handleSaveKm() {
+    if (!selectedRoute?.value || kmCalcAssignments.length === 0) return
+
+    setSavingKm(true)
+    const items: RouteLocation[] = kmCalcAssignments.map((assignment) => ({
+      routeId: assignment.routeId,
+      locationCode: assignment.locationCode,
+      km: kmCalcTotals[assignment.locationCode] ?? 0,
+    }))
+    const ok = await upsertRouteLocations(items)
+    if (ok) {
+      const refreshed = await getRouteLocations()
+      setAssignments(refreshed)
+      homeContentCache = { machines, products, assignments: refreshed }
+    }
+    setSavingKm(false)
   }
 
   const hasInvalidRoute = Boolean(initialRouteId) && !loading && !selectedRoute
@@ -446,6 +641,28 @@ export function HomeContent({ initialRouteId }: HomeContentProps) {
                   ? `${customStart.lat.toFixed(5)}, ${customStart.lng.toFixed(5)}`
                   : "Default Starting Point"}
             </button>
+            {activeCustomOrder && (
+              <button
+                type="button"
+                onClick={handleClearCustomOrder}
+                title="Clear custom order and remove this indicator"
+                className="flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-medium text-primary hover:bg-primary/20"
+              >
+                <ListOrderedIcon className="size-3.5" />
+                {activeCustomOrder.name}
+                <XIcon className="size-3.5" />
+              </button>
+            )}
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => setReorderOpen(true)}
+              className="h-7 text-[11px] gap-1.5 px-2.5 border-slate-400 bg-slate-300 text-slate-800 hover:bg-slate-400 dark:border-slate-500 dark:bg-slate-600 dark:text-slate-100 dark:hover:bg-slate-500"
+              variant="outline"
+            >
+              <ListOrderedIcon className="size-3.5" />
+              Reorder
+            </Button>
             <Button
               type="button"
               size="sm"
@@ -680,11 +897,12 @@ export function HomeContent({ initialRouteId }: HomeContentProps) {
                         <button
                           key={column.id}
                           type="button"
-                          onClick={() =>
+                          onClick={() => {
+                            setActiveCustomOrder(null)
                             setSortConfig(
                               isActive ? { key: column.id, dir: dir === "asc" ? "desc" : "asc" } : { key: column.id, dir: "asc" }
                             )
-                          }
+                          }}
                           className={cn(
                             "flex items-center justify-between rounded-lg border px-3 py-2 text-sm font-medium transition-colors",
                             isActive
@@ -746,6 +964,245 @@ export function HomeContent({ initialRouteId }: HomeContentProps) {
                   ))}
                 </FieldGroup>
               </FieldSet>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={reorderOpen} onOpenChange={setReorderOpen}>
+        <DialogContent className="flex max-h-[80vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-lg">
+          <DialogHeader className="shrink-0 border-b px-5 pt-5 pb-4">
+            <DialogTitle>Reorder Locations</DialogTitle>
+            <DialogDescription className="sr-only">
+              Create a custom sort order for this route&apos;s locations, or apply a previously saved order.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="shrink-0 px-4 pt-3">
+            <div className="flex gap-1 rounded-lg bg-muted p-1">
+              {(
+                [
+                  { id: "custom", label: "Custom Reorder", icon: <ListOrderedIcon className="size-3.5" /> },
+                  { id: "km", label: "Calculation KM", icon: <CalculatorIcon className="size-3.5" /> },
+                  { id: "saved", label: "Saved Orders", icon: <BookmarkIcon className="size-3.5" /> },
+                ] as const
+              ).map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setReorderTab(tab.id)}
+                  className={cn(
+                    "flex flex-1 items-center justify-center gap-1.5 rounded-md py-1.5 text-xs font-semibold transition-colors",
+                    reorderTab === tab.id
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {tab.icon}
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+            {!selectedRoute ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">
+                Select a route first to create or apply a custom order.
+              </p>
+            ) : reorderTab === "custom" ? (
+              <div className="flex flex-col gap-3">
+                <FieldDescription>
+                  Assign a sort number to each location for {selectedRoute.value}, then save it as a named order.
+                </FieldDescription>
+                <div className="overflow-hidden rounded-lg border">
+                  <Table className="text-xs">
+                    <TableHeader>
+                      <TableRow className="hover:bg-transparent">
+                        <TableHead className="px-3 py-2 text-left">Code</TableHead>
+                        <TableHead className="px-3 py-2 text-left">Name</TableHead>
+                        <TableHead className="w-20 px-3 py-2 text-center">Order</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {reorderAssignments.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={3} className="py-6 text-center text-muted-foreground">
+                            No locations assigned to this route yet.
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        reorderAssignments.map((assignment) => {
+                          const product = productMap.get(assignment.locationCode)
+                          return (
+                            <TableRow key={assignment.locationCode}>
+                              <TableCell className="px-3 py-2 font-medium">
+                                {assignment.locationCode}
+                              </TableCell>
+                              <TableCell className="px-3 py-2 text-muted-foreground">
+                                {product?.productName ?? assignment.locationName ?? "Unknown"}
+                              </TableCell>
+                              <TableCell className="px-3 py-1.5 text-center">
+                                <input
+                                  type="number"
+                                  min={0}
+                                  value={reorderDraft[assignment.locationCode] ?? ""}
+                                  onChange={(event) =>
+                                    handleReorderNumberChange(assignment.locationCode, event.target.value)
+                                  }
+                                  placeholder="No."
+                                  className="h-7 w-16 rounded-md border bg-background px-1.5 text-center text-xs tabular-nums placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-ring"
+                                />
+                              </TableCell>
+                            </TableRow>
+                          )
+                        })
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+
+                <Field>
+                  <FieldLabel htmlFor="reorder-name">Order name</FieldLabel>
+                  <input
+                    id="reorder-name"
+                    value={reorderName}
+                    onChange={(event) => setReorderName(event.target.value)}
+                    placeholder="e.g. Morning delivery sequence"
+                    className="h-9 w-full rounded-md border bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                  />
+                </Field>
+
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={handleSaveReorder}
+                  disabled={savingOrder || reorderAssignments.length === 0 || !reorderName.trim()}
+                  className="gap-1.5 self-end"
+                >
+                  <SaveIcon className="size-3.5" />
+                  {savingOrder ? "Saving..." : "Save order"}
+                </Button>
+              </div>
+            ) : reorderTab === "km" ? (
+              <div className="flex flex-col gap-3">
+                <FieldDescription>
+                  Enter the distance from the previous stop for each location (the first one is measured from QL
+                  Kitchen). The total KM is calculated automatically, step by step.
+                </FieldDescription>
+                <div className="overflow-hidden rounded-lg border">
+                  <Table className="text-xs">
+                    <TableHeader>
+                      <TableRow className="hover:bg-transparent">
+                        <TableHead className="px-3 py-2 text-left">Code</TableHead>
+                        <TableHead className="px-3 py-2 text-left">Name</TableHead>
+                        <TableHead className="w-20 px-3 py-2 text-center">+ KM</TableHead>
+                        <TableHead className="w-24 px-3 py-2 text-center">Total KM</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {kmCalcAssignments.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={4} className="py-6 text-center text-muted-foreground">
+                            No locations assigned to this route yet.
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        kmCalcAssignments.map((assignment, index) => {
+                          const product = productMap.get(assignment.locationCode)
+                          return (
+                            <TableRow key={assignment.locationCode}>
+                              <TableCell className="px-3 py-2 font-medium">
+                                {assignment.locationCode}
+                              </TableCell>
+                              <TableCell className="px-3 py-2 text-muted-foreground">
+                                {product?.productName ?? assignment.locationName ?? "Unknown"}
+                              </TableCell>
+                              <TableCell className="px-3 py-1.5 text-center">
+                                <input
+                                  type="number"
+                                  min={0}
+                                  step="0.1"
+                                  value={kmStepDraft[assignment.locationCode] ?? ""}
+                                  onChange={(event) =>
+                                    handleKmStepChange(assignment.locationCode, event.target.value)
+                                  }
+                                  placeholder={index === 0 ? "Kitchen" : "Prev."}
+                                  className="h-7 w-20 rounded-md border bg-background px-1.5 text-center text-xs tabular-nums placeholder:text-[10px] placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-ring"
+                                />
+                              </TableCell>
+                              <TableCell className="px-3 py-2 text-center font-semibold tabular-nums">
+                                {formatKm(kmCalcTotals[assignment.locationCode] ?? 0)}
+                              </TableCell>
+                            </TableRow>
+                          )
+                        })
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={handleSaveKm}
+                  disabled={savingKm || kmCalcAssignments.length === 0}
+                  className="gap-1.5 self-end"
+                >
+                  <SaveIcon className="size-3.5" />
+                  {savingKm ? "Saving..." : "Save KM values"}
+                </Button>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {savedOrdersLoading ? (
+                  <LoadingText text="Loading saved orders" />
+                ) : savedOrders.length === 0 ? (
+                  <p className="py-6 text-center text-sm text-muted-foreground">
+                    No saved orders for this route yet. Create one from the Custom Reorder tab.
+                  </p>
+                ) : (
+                  savedOrders.map((order) => {
+                    const isActive = activeCustomOrder?.id === order.id
+                    return (
+                      <div
+                        key={order.id}
+                        className={cn(
+                          "flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm",
+                          isActive ? "border-primary bg-primary/10" : "border-transparent bg-muted/50"
+                        )}
+                      >
+                        <div className="flex flex-col">
+                          <span className="font-medium">{order.name}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {order.items.length} location{order.items.length !== 1 && "s"}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant={isActive ? "default" : "outline"}
+                            onClick={() => handleApplySavedOrder(order)}
+                            className="h-7 px-2.5 text-[11px]"
+                          >
+                            {isActive ? "Applied" : "Apply"}
+                          </Button>
+                          <Button
+                            type="button"
+                            size="icon-sm"
+                            variant="ghost"
+                            onClick={() => handleDeleteSavedOrder(order.id)}
+                            className="text-muted-foreground hover:text-destructive"
+                          >
+                            <Trash2Icon className="size-3.5" />
+                          </Button>
+                        </div>
+                      </div>
+                    )
+                  })
+                )}
+              </div>
             )}
           </div>
         </DialogContent>

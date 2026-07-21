@@ -70,6 +70,24 @@ CREATE TABLE IF NOT EXISTS delivery_order_items (
   FOREIGN KEY (delivery_order_id) REFERENCES delivery_orders(id) ON DELETE CASCADE
 );
 
+-- Custom (user-defined) route location sort orders
+CREATE TABLE IF NOT EXISTS custom_orders (
+  id SERIAL PRIMARY KEY,
+  route_id VARCHAR(50) NOT NULL,
+  name VARCHAR(255) NOT NULL,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Items belonging to a saved custom order
+CREATE TABLE IF NOT EXISTS custom_order_items (
+  id SERIAL PRIMARY KEY,
+  custom_order_id INTEGER NOT NULL,
+  location_code VARCHAR(100) NOT NULL,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  FOREIGN KEY (custom_order_id) REFERENCES custom_orders(id) ON DELETE CASCADE
+);
+
 -- Create indexes for faster queries
 CREATE INDEX IF NOT EXISTS idx_products_product_code ON products(product_code);
 CREATE INDEX IF NOT EXISTS idx_route_locations_route_id ON route_locations(route_id);
@@ -77,3 +95,5 @@ CREATE INDEX IF NOT EXISTS idx_refill_items_machine_id ON refill_items(machine_i
 CREATE INDEX IF NOT EXISTS idx_delivery_orders_code ON delivery_orders(code);
 CREATE INDEX IF NOT EXISTS idx_delivery_orders_machine_id ON delivery_orders(machine_id);
 CREATE INDEX IF NOT EXISTS idx_delivery_order_items_delivery_order_id ON delivery_order_items(delivery_order_id);
+CREATE INDEX IF NOT EXISTS idx_custom_orders_route_id ON custom_orders(route_id);
+CREATE INDEX IF NOT EXISTS idx_custom_order_items_custom_order_id ON custom_order_items(custom_order_id);
