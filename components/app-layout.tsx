@@ -13,6 +13,7 @@ import {
   ServerIcon,
   LayoutGridIcon,
   PackageIcon,
+  ArrowLeftIcon,
 } from "lucide-react"
 import {
   DropdownMenu,
@@ -37,6 +38,7 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from "@/components/ui/sidebar"
+import { Button } from "@/components/ui/button"
 import { ThemeToggle } from "@/components/theme-toggle"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
@@ -83,6 +85,7 @@ interface AppLayoutProps {
   defaultSidebarOpen?: boolean
   headerActions?: React.ReactNode
   fullBleed?: boolean
+  onBack?: () => void
   children: React.ReactNode
 }
 
@@ -91,6 +94,7 @@ export function AppLayout({
   defaultSidebarOpen,
   headerActions,
   fullBleed,
+  onBack,
   children,
 }: AppLayoutProps) {
   const pathname = usePathname()
@@ -210,8 +214,14 @@ export function AppLayout({
       </Sidebar>
 
       <SidebarInset>
-        <header className="sticky top-0 z-20 flex h-14 items-center gap-2 border-b border-border/50 bg-background/35 px-4 backdrop-blur-2xl backdrop-saturate-150 supports-backdrop-filter:bg-background/25">
-          <SidebarTrigger />
+        <header className="glass-bar sticky top-0 z-20 flex h-14 items-center gap-2 border-b border-border/40 px-4">
+          {onBack ? (
+            <Button variant="ghost" size="icon-sm" onClick={onBack} aria-label="Go back">
+              <ArrowLeftIcon />
+            </Button>
+          ) : (
+            <SidebarTrigger />
+          )}
           <h1 className="font-semibold">{title}</h1>
           {headerActions && (
             <div className="ml-auto flex items-center gap-2">{headerActions}</div>

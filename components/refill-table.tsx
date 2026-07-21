@@ -117,7 +117,7 @@ export function RefillTable({ machineId, items, prefilledStockIn, isEditable = t
   }
 
   return (
-    <div className="rounded-xl border bg-card overflow-hidden text-xs">
+    <div className="glass-card overflow-hidden rounded-2xl text-xs">
       {/* Header bar */}
       <div className="px-4 py-2 border-b flex items-center justify-between bg-muted/40">
         <span className="text-[11px] font-semibold tracking-widest uppercase text-muted-foreground">

@@ -323,7 +323,7 @@ export function EditMachineProductsContent({ onSaveRef, onDirtyChange }: EditMac
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="rounded-xl border bg-card overflow-hidden text-xs">
+      <div className="glass-card overflow-hidden rounded-2xl text-xs">
         <div className="px-4 py-3 border-b flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between bg-muted/40">
           <div className="flex items-center gap-2">
             <span className="text-[11px] font-semibold tracking-widest uppercase text-muted-foreground">

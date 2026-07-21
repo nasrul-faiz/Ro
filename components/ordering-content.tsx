@@ -125,7 +125,7 @@ export function OrderingContent() {
 
       {selectedMachine && items.length > 0 && (
         <>
-          <div className="rounded-xl border bg-card overflow-hidden text-xs">
+          <div className="glass-card overflow-hidden rounded-2xl text-xs">
             <div className="px-4 py-2 border-b flex items-center justify-between bg-muted/40">
               <span className="text-[11px] font-semibold tracking-widest uppercase text-muted-foreground">
                 {selectedMachine} — Order Sheet
@@ -209,7 +209,7 @@ export function OrderingContent() {
             </Table>
           </div>
 
-          <div className="flex items-center justify-between rounded-xl border bg-muted/30 px-4 py-3">
+          <div className="glass-card flex items-center justify-between rounded-2xl px-4 py-3">
             <div className="flex gap-6 text-sm text-muted-foreground">
               <span>
                 <span className="font-semibold text-foreground">
@@ -261,7 +261,7 @@ function DODocument({
       </div>
 
       {/* DO Card */}
-      <div className="rounded-xl border bg-card overflow-hidden shadow-sm">
+      <div className="glass-card overflow-hidden rounded-2xl">
         {/* DO Header */}
         <div className="bg-primary px-6 py-4 flex items-start justify-between">
           <div>

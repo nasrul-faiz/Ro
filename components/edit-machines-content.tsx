@@ -332,7 +332,7 @@ export function EditMachinesContent({ onSaveRef, onDirtyChange }: EditMachinesCo
         </div>
       )}
 
-      <div className="rounded-xl border bg-card overflow-hidden text-xs">
+      <div className="glass-card overflow-hidden rounded-2xl text-xs">
         <div className="overflow-x-auto">
           <Table className="text-xs min-w-[500px]">
             <TableHeader>

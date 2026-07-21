@@ -645,7 +645,7 @@ export function EditProductsContent({ onSaveRef, onDirtyChange }: EditProductsCo
         </div>
       )}
 
-      <div className="rounded-xl border bg-card overflow-hidden text-xs">
+      <div className="glass-card overflow-hidden rounded-2xl text-xs">
         <Table className="text-xs">
           <TableHeader>
             <TableRow className="hover:bg-transparent">

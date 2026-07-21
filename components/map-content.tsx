@@ -337,18 +337,18 @@ export function MapContent({ refreshRef }: MapContentProps) {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3 p-3">
+    <div className="flex h-full min-h-0 flex-col gap-4 overflow-y-auto p-4">
       {geoError && <p className="text-xs text-red-500">{geoError}</p>}
 
       {/* Map */}
       <div
         ref={containerRef}
-        className="isolate relative z-0 w-full min-h-[200px] flex-1 overflow-hidden rounded-lg border"
+        className="glass-card isolate relative z-0 w-full min-h-[260px] max-h-[55vh] flex-1 overflow-hidden rounded-2xl"
       />
 
       {/* Location list */}
-      <div className="flex min-h-0 flex-1 flex-col rounded-lg border">
-        <div className="flex flex-wrap items-center gap-2 border-b px-3 py-2">
+      <div className="glass-card flex min-h-0 flex-none flex-col overflow-hidden rounded-2xl">
+        <div className="flex flex-wrap items-center gap-2 border-b border-border/50 px-4 py-2.5">
           <div className="relative w-full max-w-[220px]">
             <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -381,11 +381,11 @@ export function MapContent({ refreshRef }: MapContentProps) {
             Sort: {sortMode === "code" ? "Code" : "Distance"}
           </Button>
         </div>
-        <div className="flex-1 overflow-y-auto">
+        <div className="max-h-[320px] overflow-y-auto">
           {filteredLocations.length === 0 ? (
             <p className="p-4 text-center text-xs text-muted-foreground">No matching locations.</p>
           ) : (
-            <ul className="divide-y">
+            <ul className="divide-y divide-border/50">
               {filteredLocations.map((location) => {
                 const isSelected = location.productCode === selectedCode
                 return (
@@ -394,7 +394,7 @@ export function MapContent({ refreshRef }: MapContentProps) {
                       type="button"
                       onClick={() => focusLocation(location)}
                       className={cn(
-                        "flex w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-muted/60",
+                        "flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-muted/60",
                         isSelected && "bg-orange-500/10"
                       )}
                     >
@@ -425,7 +425,7 @@ export function MapContent({ refreshRef }: MapContentProps) {
           )}
         </div>
 
-        <div className="flex items-center justify-between gap-2 border-t px-3 py-2">
+        <div className="flex items-center justify-between gap-2 border-t border-border/50 px-4 py-2.5">
           <p className="text-xs font-medium text-muted-foreground">
             Showing {filteredLocations.length} of {locations.length} location
             {locations.length === 1 ? "" : "s"}

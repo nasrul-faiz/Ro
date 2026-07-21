@@ -424,7 +424,7 @@ export function HomeContent({ initialRouteId }: HomeContentProps) {
 
       {selectedRoute ? (
         <div className={cn(
-          "rounded-xl border bg-card overflow-hidden text-xs",
+          "glass-card overflow-hidden rounded-2xl text-xs",
           hasDeliveryToday && "ring-2 ring-emerald-400 ring-offset-1"
         )}>
           {/* Header bar with delivery indicator */}

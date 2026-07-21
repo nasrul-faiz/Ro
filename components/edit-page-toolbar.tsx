@@ -5,14 +5,12 @@ import { ArrowLeftIcon, SaveIcon, CheckCircleIcon, AlertCircleIcon } from "lucid
 import { Button } from "@/components/ui/button"
 import { useRouter } from "next/navigation"
 
-interface EditPageToolbarProps {
-  title: string
+interface EditSaveActionsProps {
   onSave: () => Promise<void>
   isDirty?: boolean
 }
 
-export function EditPageToolbar({ title, onSave, isDirty = false }: EditPageToolbarProps) {
-  const router = useRouter()
+export function EditSaveActions({ onSave, isDirty = false }: EditSaveActionsProps) {
   const [isSaving, setIsSaving] = React.useState(false)
   const [saveStatus, setSaveStatus] = React.useState<"idle" | "success" | "error">("idle")
 
@@ -32,6 +30,44 @@ export function EditPageToolbar({ title, onSave, isDirty = false }: EditPageTool
   }
 
   return (
+    <div className="flex items-center gap-2">
+      {saveStatus === "success" && (
+        <div className="flex items-center gap-1.5 text-xs text-emerald-600 px-2 py-1 rounded bg-emerald-50 dark:bg-emerald-950/30">
+          <CheckCircleIcon className="size-3.5" />
+          Saved to database
+        </div>
+      )}
+      {saveStatus === "error" && (
+        <div className="flex items-center gap-1.5 text-xs text-red-600 px-2 py-1 rounded bg-red-50 dark:bg-red-950/30">
+          <AlertCircleIcon className="size-3.5" />
+          Save failed
+        </div>
+      )}
+      {(isDirty || isSaving) && (
+        <Button
+          size="sm"
+          onClick={handleSave}
+          disabled={isSaving}
+          className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
+        >
+          <SaveIcon className="size-4" />
+          {isSaving ? "Saving..." : "Save"}
+        </Button>
+      )}
+    </div>
+  )
+}
+
+interface EditPageToolbarProps {
+  title: string
+  onSave: () => Promise<void>
+  isDirty?: boolean
+}
+
+export function EditPageToolbar({ title, onSave, isDirty = false }: EditPageToolbarProps) {
+  const router = useRouter()
+
+  return (
     <div className="flex items-center justify-between border-b bg-background px-4 py-3 gap-4">
       <div className="flex items-center gap-3">
         <button
@@ -44,31 +80,7 @@ export function EditPageToolbar({ title, onSave, isDirty = false }: EditPageTool
         <h1 className="text-lg font-semibold">{title}</h1>
       </div>
 
-      <div className="flex items-center gap-2">
-        {saveStatus === "success" && (
-          <div className="flex items-center gap-1.5 text-xs text-emerald-600 px-2 py-1 rounded bg-emerald-50 dark:bg-emerald-950/30">
-            <CheckCircleIcon className="size-3.5" />
-            Saved to database
-          </div>
-        )}
-        {saveStatus === "error" && (
-          <div className="flex items-center gap-1.5 text-xs text-red-600 px-2 py-1 rounded bg-red-50 dark:bg-red-950/30">
-            <AlertCircleIcon className="size-3.5" />
-            Save failed
-          </div>
-        )}
-        {(isDirty || isSaving) && (
-          <Button
-            size="sm"
-            onClick={handleSave}
-            disabled={isSaving}
-            className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
-          >
-            <SaveIcon className="size-4" />
-            {isSaving ? "Saving..." : "Save"}
-          </Button>
-        )}
-      </div>
+      <EditSaveActions onSave={onSave} isDirty={isDirty} />
     </div>
   )
 }
